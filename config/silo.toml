@@ -1,0 +1,6 @@
+[logger]
+filepath = "silo.logs"
+level = "debug"
+
+[app]
+port = "8080"

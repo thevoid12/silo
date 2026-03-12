@@ -12,7 +12,7 @@
 silo/
 ├── cmd/silo/                   # Go binary entry point (cobra root)
 │   └── main.go
-├── internal/
+├── pkg/
 │   ├── core/                   # Core agent setup (ADK wiring, shared state)
 │   ├── vault/                  # XChaCha20-Poly1305 + Argon2id encrypted vault
 │   ├── shell/                  # Shell tool (os/exec, sandbox, allowlist, blocklist)
@@ -59,18 +59,18 @@ silo/
 - `go mod init github.com/user/silo`
 - `cmd/silo/main.go` with cobra root command
 - Subcommand stubs: `init`, `chat`, `start`, `stop`, `status`, `version`, `doctor`, `vault`
-- `internal/config/` reads `~/.silo/silo.toml` via viper
+- `pkg/config/` reads `~/.silo/silo.toml` via viper
 - Data directory: `~/.silo/` (keys/, workspace/, silo.toml, *.db files)
 
 **Files:**
 - `cmd/silo/main.go`
-- `internal/config/config.go`
+- `pkg/config/config.go`
 - `silo.toml.example`
 - `go.mod`
 
 ### Step 2 — Vault: XChaCha20-Poly1305 + Argon2id
 
-- `internal/vault/vault.go` — encrypt, decrypt, key derivation
+- `pkg/vault/vault.go` — encrypt, decrypt, key derivation
 - Argon2id derives a 256-bit key from the user's password
 - XChaCha20-Poly1305 AEAD for secret storage
 - Vault file: `~/.silo/vault.enc`
@@ -80,9 +80,9 @@ silo/
 - `silo vault delete <key>`
 
 **Files:**
-- `internal/vault/vault.go`
-- `internal/vault/vault_test.go`
-- `internal/vault/crypto.go`
+- `pkg/vault/vault.go`
+- `pkg/vault/vault_test.go`
+- `pkg/vault/crypto.go`
 
 ### Step 3 — silo init wizard
 
@@ -115,7 +115,7 @@ silo/
 
 ### Step 5 — ADK agent setup
 
-- `internal/core/agent.go` — creates an ADK `Agent` with:
+- `pkg/core/agent.go` — creates an ADK `Agent` with:
   - System prompt (from config or default)
   - Model selection (Gemini by default, OpenAI via LiteLLM as alternate)
   - Tool registry
@@ -123,12 +123,12 @@ silo/
 - Provider API key loaded from vault at startup
 
 **Files:**
-- `internal/core/agent.go`
-- `internal/core/runner.go`
+- `pkg/core/agent.go`
+- `pkg/core/runner.go`
 
 ### Step 6 — Shell tool as ADK FunctionTool
 
-- `internal/shell/tool.go` — implements ADK `FunctionTool` interface
+- `pkg/shell/tool.go` — implements ADK `FunctionTool` interface
 - Executes commands via `os/exec.CommandContext` with configurable timeout
 - Allowlist: commands that run without approval (e.g., `ls`, `cat`, `git status`)
 - Blocklist: commands that are always rejected (e.g., `rm -rf /`, `mkfs`)
@@ -138,14 +138,14 @@ silo/
 - Captures stdout, stderr, exit code; returns structured result to agent
 
 **Files:**
-- `internal/shell/tool.go`
-- `internal/shell/tool_test.go`
-- `internal/shell/policy.go`
-- `internal/shell/sandbox.go`
+- `pkg/shell/tool.go`
+- `pkg/shell/tool_test.go`
+- `pkg/shell/policy.go`
+- `pkg/shell/sandbox.go`
 
 ### Step 7 — Tool approval via Go channels
 
-- `internal/approval/approval.go`
+- `pkg/approval/approval.go`
 - When a command needs approval:
   1. Shell tool sends an `ApprovalRequest` on a channel
   2. The UI layer (CLI or gateway) receives it, prompts the user
@@ -155,8 +155,8 @@ silo/
 - Timeout: if no response within configurable duration, deny by default
 
 **Files:**
-- `internal/approval/approval.go`
-- `internal/approval/approval_test.go`
+- `pkg/approval/approval.go`
+- `pkg/approval/approval_test.go`
 
 ### Step 8 — silo chat (interactive CLI)
 
@@ -209,7 +209,7 @@ go build -o silo ./cmd/silo
 
 ### Step 9 — Chi HTTP server with auth
 
-- `internal/gateway/server.go` — gin router
+- `pkg/gateway/server.go` — gin router
 - Bearer token auth middleware (token from vault)
 - Endpoints:
   - `GET /health` — 200 OK (no auth)
@@ -219,8 +219,8 @@ go build -o silo ./cmd/silo
 - `silo status` checks if server is running
 
 **Files:**
-- `internal/gateway/server.go`
-- `internal/gateway/middleware.go`
+- `pkg/gateway/server.go`
+- `pkg/gateway/middleware.go`
 - `cmd/silo/start.go`
 - `cmd/silo/stop.go`
 - `cmd/silo/status.go`
@@ -238,7 +238,7 @@ go build -o silo ./cmd/silo
 - If a tool call requires approval, emits `event: approval_required` and pauses
 
 **Files:**
-- `internal/gateway/chat.go`
+- `pkg/gateway/chat.go`
 
 ### Step 11 — /silo/brain/tool-approval endpoint
 
@@ -248,7 +248,7 @@ go build -o silo ./cmd/silo
 - Timeout: pending approvals expire after configured duration
 
 **Files:**
-- `internal/gateway/approval.go`
+- `pkg/gateway/approval.go`
 
 ### Step 12 — Session persistence via ADK DatabaseSessionService
 
@@ -258,7 +258,7 @@ go build -o silo ./cmd/silo
 - Session ID returned on first chat, client sends it on subsequent requests
 
 **Files:**
-- `internal/core/session.go`
+- `pkg/core/session.go`
 
 ---
 
@@ -307,14 +307,14 @@ curl -H "Authorization: Bearer <token>" \
   - Spawns `silo start` as a child process on app launch
   - Sends SIGTERM on app quit
   - IPC bridge: renderer communicates with Go backend via HTTP (localhost)
-- `internal/ipc/` — any Go-side helpers for desktop-specific needs
+- `pkg/ipc/` — any Go-side helpers for desktop-specific needs
 - Dev mode: `npm run dev` proxies to Go backend
 
 **Files:**
 - `desktop/main.js`
 - `desktop/package.json`
 - `desktop/electron-builder.yml`
-- `internal/ipc/ipc.go`
+- `pkg/ipc/ipc.go`
 
 ### Step 14 — Chat view
 
@@ -398,14 +398,14 @@ make desktop-mac
 
 ### Step 18 — Structured logging
 
-- `internal/logging/logging.go` — configures `zap` with:
+- `pkg/logging/logging.go` — configures `zap` with:
   - JSON encoder for file output (`~/.silo/silo.log`)
   - Console encoder for stderr (when running in foreground)
   - Log level from config (default: info)
 - All packages use `logger.With(zap.String("component", "vault"))` etc.
 
 **Files:**
-- `internal/logging/logging.go`
+- `pkg/logging/logging.go`
 
 ### Step 19 — Error messages with actionable next steps
 
