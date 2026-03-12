@@ -1,0 +1,14 @@
+version: "2"
+sql:
+  - engine: "sqlite"
+    schema:
+      - "silo/schema.sql"
+    queries:
+      - "silo/silo_query.sql"
+    gen:
+      go:
+        package: "dbal"
+        out: "../dbal"
+        sql_package: "sqlx"
+        output_models_file_name: "dbmodels.go"
+

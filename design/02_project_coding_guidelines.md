@@ -25,7 +25,7 @@ silo/
 ├── cmd/
 │   └── silo/                   # main.go — single entry point
 │       └── main.go
-├── internal/                   # Private packages (not importable externally)
+├── pkg/                   # Private packages (not importable externally)
 │   ├── brain/                  # Agent loop, ReAct, context assembly
 │   │   ├── brain.go            # Brain interface + DefaultBrain
 │   │   ├── react.go            # ReAct loop implementation
@@ -89,9 +89,9 @@ silo/
 
 ### Layout Rules
 
-1. **`cmd/silo/main.go`** is the only `package main`. It wires dependencies and calls into `internal/`.
-2. **`internal/`** holds all business logic. Nothing in `internal/` is importable by external modules — this is Go's built-in encapsulation.
-3. **`pkg/`** is reserved for types that external adapters (Telegram bot, web UI) might import. Keep it minimal. If in doubt, put it in `internal/`.
+1. **`cmd/silo/main.go`** is the only `package main`. It wires dependencies and calls into `pkg/`.
+2. **`pkg/`** holds all business logic. Nothing in `pkg/` is importable by external modules — this is Go's built-in encapsulation.
+3. **`pkg/`** is reserved for types that external adapters (Telegram bot, web UI) might import. Keep it minimal. If in doubt, put it in `pkg/`.
 4. **No `util/` or `common/` packages.** Every package has a clear domain name.
 5. **One package per domain concern.** Do not merge session + memory + vault into one package.
 
@@ -112,7 +112,7 @@ module github.com/siloframework/silo
 | Need | Choice | Rationale |
 |------|--------|-----------|
 | HTTP server | `github.com/gin-gonic/gin` | High-performance, built-in routing/middleware/binding |
-| SQLite | `modernc.org/sqlite` + `github.com/jmoiron/sqlx` | Pure Go driver, sqlx for ergonomic query building |
+| SQLite | `mattn/sqlite` + `github.com/jmoiron/sqlx` | Pure Go driver, sqlx for ergonomic query building |
 | CLI | `cobra` + `pflag` | Industry standard, subcommand tree support |
 | Config | `koanf` or `viper` | TOML loading, env override, hot-reload hooks |
 | TOML | `github.com/BurntSushi/toml` | Fast, well-maintained |
@@ -139,7 +139,7 @@ module github.com/siloframework/silo
 Interfaces are defined in the package that **uses** them, not the package that implements them. This is canonical Go.
 
 ```go
-// internal/brain/brain.go — Brain USES Provider, so Provider interface lives here
+// pkg/brain/brain.go — Brain USES Provider, so Provider interface lives here
 // (or in a shared types package if multiple consumers exist)
 package brain
 
@@ -151,9 +151,9 @@ type Provider interface {
 }
 ```
 
-The `internal/provider/` package implements this interface but does not define it.
+The `pkg/provider/` package implements this interface but does not define it.
 
-**Exception:** When multiple packages consume the same interface (e.g., `SessionStore` used by both `brain` and `gateway`), define it in `pkg/types/` or a shared `internal/types/` package.
+**Exception:** When multiple packages consume the same interface (e.g., `SessionStore` used by both `brain` and `gateway`), define it in `pkg/types/` or a shared `pkg/types/` package.
 
 ### Small Interfaces
 
@@ -211,7 +211,7 @@ if err := row.Scan(&session.ID, &session.CreatedAt); err != nil {
 ### Custom Error Types
 
 Define sentinel errors for expected conditions. Use custom error types for structured error data:
-
+define the error as a enum and use it.
 ```go
 var (
     ErrSessionNotFound = errors.New("session not found")
@@ -233,7 +233,7 @@ func (e *ProviderError) Error() string {
 
 ### Rules
 
-1. **Never panic in library code.** Panics are reserved for truly unrecoverable programmer errors (e.g., invalid regex literal). All `internal/` packages return errors.
+1. **Never panic in library code.** Panics are reserved for truly unrecoverable programmer errors (e.g., invalid regex literal). All `pkg/` packages return errors.
 2. **Never ignore errors.** If you intentionally discard an error, document why with a comment.
 3. **Check errors immediately.** No `err` variable should live more than one line before being checked.
 4. **`errors.Is()` and `errors.As()` for matching** — never compare error strings.
@@ -395,7 +395,7 @@ Run with: `go test -tags=integration ./...`
 
 ### Coverage
 
-Target: **80%+ line coverage** for `internal/` packages. Not a hard gate, but PRs that significantly decrease coverage require justification.
+Target: **80%+ line coverage** for `pkg/` packages. Not a hard gate, but PRs that significantly decrease coverage require justification.
 
 ---
 
