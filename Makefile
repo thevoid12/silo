@@ -1,4 +1,4 @@
-.PHONY: build clean
+.PHONY: build clean test
 
 BINARY_NAME=silo
 COMMIT=$(shell git rev-parse --short HEAD 2>/dev/null || echo "none")
@@ -10,3 +10,6 @@ build:
 
 clean:
 	rm -f $(BINARY_NAME)
+
+test:
+	go test ./...

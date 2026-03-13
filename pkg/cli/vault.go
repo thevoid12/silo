@@ -2,8 +2,15 @@ package cli
 
 import (
 	"fmt"
+	"syscall"
+
+	"silo/pkg/config"
+	"silo/pkg/vault"
+	"silo/pkg/vault/models"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
+	"golang.org/x/term"
 )
 
 var vaultCmd = &cobra.Command{
@@ -18,13 +25,43 @@ Secrets are encrypted at rest and never stored in plaintext.`,
 var vaultInitCmd = &cobra.Command{
 	Use:   "init",
 	Short: "Create a new vault with a password",
-	Long: `Create the encrypted vault and set the encryption password.
-
-This is typically done as part of 'silo init', but can be run
-independently to create or recreate the vault.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// TODO: Implement in Step 2
-		fmt.Println("silo vault init - not yet implemented")
+		vaultPath := viper.GetString("vault.path")
+		v := vault.New(vaultPath)
+
+		if v.Exists() {
+			return fmt.Errorf("vault already exists at %s", vaultPath)
+		}
+
+		fmt.Print("Enter vault password: ")
+		pass1, err := readPassword()
+		if err != nil {
+			return err
+		}
+
+		fmt.Print("Confirm password: ")
+		pass2, err := readPassword()
+		if err != nil {
+			return err
+		}
+
+		if pass1 != pass2 {
+			return fmt.Errorf("passwords do not match")
+		}
+
+		if len(pass1) < 8 {
+			return fmt.Errorf("password must be at least 8 characters")
+		}
+
+		if err := config.EnsureDataDir(); err != nil {
+			return err
+		}
+
+		if err := v.Create(pass1); err != nil {
+			return err
+		}
+
+		fmt.Println("Vault created successfully")
 		return nil
 	},
 }
@@ -32,14 +69,27 @@ independently to create or recreate the vault.`,
 var vaultSetCmd = &cobra.Command{
 	Use:   "set <key>",
 	Short: "Store a secret in the vault",
-	Long: `Store a secret value in the encrypted vault.
-
-The value will be prompted with no-echo input. If the key already
-exists, the value will be overwritten.`,
-	Args: cobra.ExactArgs(1),
+	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// TODO: Implement in Step 2
-		fmt.Printf("silo vault set %s - not yet implemented\n", args[0])
+		v, err := openVault()
+		if err != nil {
+			return err
+		}
+		defer v.Close()
+
+		key := args[0]
+
+		fmt.Printf("Enter value for %s: ", key)
+		value, err := readPassword()
+		if err != nil {
+			return err
+		}
+
+		if err := v.WriteSecret(key, []byte(value)); err != nil {
+			return err
+		}
+
+		fmt.Printf("Secret '%s' stored\n", key)
 		return nil
 	},
 }
@@ -47,11 +97,20 @@ exists, the value will be overwritten.`,
 var vaultGetCmd = &cobra.Command{
 	Use:   "get <key>",
 	Short: "Retrieve a secret from the vault",
-	Long:  `Retrieve and display a secret value from the vault.`,
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// TODO: Implement in Step 2
-		fmt.Printf("silo vault get %s - not yet implemented\n", args[0])
+		v, err := openVault()
+		if err != nil {
+			return err
+		}
+		defer v.Close()
+
+		value, err := v.ReadSecret(args[0])
+		if err != nil {
+			return err
+		}
+
+		fmt.Println(string(value))
 		return nil
 	},
 }
@@ -59,12 +118,46 @@ var vaultGetCmd = &cobra.Command{
 var vaultListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List all secret keys in the vault",
-	Long: `List all secret key names stored in the vault.
-
-Only key names are shown, not the secret values.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// TODO: Implement in Step 2
-		fmt.Println("silo vault list - not yet implemented")
+		v, err := openVault()
+		if err != nil {
+			return err
+		}
+		defer v.Close()
+
+		keys, err := v.ListKeys()
+		if err != nil {
+			return err
+		}
+
+		if len(keys) == 0 {
+			fmt.Println("No secrets stored")
+			return nil
+		}
+
+		for _, k := range keys {
+			fmt.Println(k)
+		}
+		return nil
+	},
+}
+
+var vaultDeleteCmd = &cobra.Command{
+	Use:   "delete <key>",
+	Short: "Delete a secret from the vault",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		v, err := openVault()
+		if err != nil {
+			return err
+		}
+		defer v.Close()
+
+		if err := v.RemoveSecret(args[0]); err != nil {
+			return err
+		}
+
+		fmt.Printf("Secret '%s' deleted\n", args[0])
 		return nil
 	},
 }
@@ -74,4 +167,36 @@ func init() {
 	vaultCmd.AddCommand(vaultSetCmd)
 	vaultCmd.AddCommand(vaultGetCmd)
 	vaultCmd.AddCommand(vaultListCmd)
+	vaultCmd.AddCommand(vaultDeleteCmd)
+}
+
+func readPassword() (string, error) {
+	pass, err := term.ReadPassword(int(syscall.Stdin))
+	fmt.Println()
+	if err != nil {
+		return "", fmt.Errorf("read password: %w", err)
+	}
+	return string(pass), nil
+}
+
+// openVault prompts for a password and returns an unlocked vault
+func openVault() (models.SecretVault, error) {
+	vaultPath := viper.GetString("vault.path")
+	v := vault.New(vaultPath)
+
+	if !v.Exists() {
+		return nil, fmt.Errorf("vault not found. Run 'silo vault init' first")
+	}
+
+	fmt.Print("Enter vault password: ")
+	pass, err := readPassword()
+	if err != nil {
+		return nil, err
+	}
+
+	if err := v.Open(pass); err != nil {
+		return nil, err
+	}
+
+	return v, nil
 }
