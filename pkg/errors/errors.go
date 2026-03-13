@@ -23,6 +23,13 @@ const (
 	CodeUnsupportedProvider = iota + 46 // starts at 50
 	CodeAgentBuild
 	CodeRunnerBuild
+
+	// Shell: 100+
+	CodeCommandBlocked = iota + 93 // starts at 100
+	CodeCommandTimeout
+	CodeSandboxCreate
+	CodeSandboxExecute
+	CodePathBlocked
 )
 
 var (
@@ -36,4 +43,11 @@ var (
 	ErrUnsupportedProvider = &SiloError{Code: CodeUnsupportedProvider, Message: "unsupported provider"}
 	ErrAgentBuild          = &SiloError{Code: CodeAgentBuild, Message: "failed to build agent"}
 	ErrRunnerBuild         = &SiloError{Code: CodeRunnerBuild, Message: "failed to build runner"}
+
+	// Shell errors
+	ErrCommandBlocked  = &SiloError{Code: CodeCommandBlocked, Message: "command is blocked by policy"}
+	ErrCommandTimeout  = &SiloError{Code: CodeCommandTimeout, Message: "command timed out"}
+	ErrSandboxCreate   = &SiloError{Code: CodeSandboxCreate, Message: "failed to create sandbox"}
+	ErrSandboxExecute  = &SiloError{Code: CodeSandboxExecute, Message: "sandbox execution failed"}
+	ErrPathBlocked     = &SiloError{Code: CodePathBlocked, Message: "path is blocked by policy"}
 )
