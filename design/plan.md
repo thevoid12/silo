@@ -7,7 +7,9 @@
 ---
 
 ## Workspace Layout
-
+inside package we have each package 
+and inside each package we will have a model folder for all the interfaces and structs
+all request model from the ui needs to be end with Request, reponse should we end with Response validated and sanitized (use google's validator)
 ```
 silo/
 ├── cmd/silo/                   # Go binary entry point (cobra root)
@@ -44,7 +46,7 @@ silo/
 | `github.com/spf13/viper` | serde + toml | Config parsing |
 | `github.com/gin-gonic/gin` | axum | HTTP framework |
 | `golang.org/x/crypto` | chacha20poly1305 + argon2 crates | Vault encryption |
-| `modernc.org/sqlite` | rusqlite | SQLite driver (pure Go, no CGO) |
+| `mattn/sqlite` | rusqlite | SQLite driver (pure Go, no CGO) |
 | `github.com/jmoiron/sqlx` | — | Ergonomic SQL query building |
 | `go.uber.org/zap` | tracing | Structured logging |
 | `github.com/google/uuid` | uuid crate | UUID generation |
@@ -73,7 +75,7 @@ silo/
 - `pkg/vault/vault.go` — encrypt, decrypt, key derivation
 - Argon2id derives a 256-bit key from the user's password
 - XChaCha20-Poly1305 AEAD for secret storage
-- Vault file: `~/.silo/vault.enc`
+- Vault file: `~/.silo/vault.enc` 
 - `silo vault set <key>` — prompts for value, encrypts, stores
 - `silo vault get <key>` — decrypts, prints to stdout
 - `silo vault list` — lists stored key names (not values)
@@ -97,7 +99,7 @@ silo/
 
 ### Step 4 — silo version, silo doctor
 
-- `silo version` — prints version, commit hash, build date (ldflags)
+- `silo version` — prints version, commit hash, build date (ldflags) /version/version.go has the version
 - `silo doctor` — checks:
   - `~/.silo/` exists and is writable
   - `silo.toml` parses correctly
@@ -114,10 +116,10 @@ silo/
 ## Phase B: Agent + Shell Tool (First Chat)
 
 ### Step 5 — ADK agent setup
-
+- refer agent.md
 - `pkg/core/agent.go` — creates an ADK `Agent` with:
-  - System prompt (from config or default)
-  - Model selection (Gemini by default, OpenAI via LiteLLM as alternate)
+  - System prompt (from config or default) add sys_prompt.toml inside config and add the system prompts there and use
+  - Model selection (any model can be selected)
   - Tool registry
 - ADK handles the ReAct loop, tool dispatch, and streaming internally
 - Provider API key loaded from vault at startup

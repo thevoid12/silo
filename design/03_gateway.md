@@ -151,7 +151,7 @@ All layers are toggleable in `silo.toml`. Applied in order via gin middleware ch
 Request
   │
   ├─ 1. CORS                        ← required for frontend dev
-  ├─ 2. Request Size Limit           ← 10 MB default, prevents OOM on Pi
+  ├─ 2. Request Size Limit           ← 10 MB default, prevents OOM on Pi part of config
   ├─ 3. Token Authentication         ← Bearer token, mandatory
   ├─ 4. Request Validation           ← Go struct validation
   └─ 5. Route Handler                ← Brain / Vault / Muscle dispatch
@@ -217,7 +217,7 @@ Two-step pattern: request capability → receive scoped token → execute with t
 
 ## 10. Error Format
 
-All endpoints return errors in **RFC 7807 Problem Details** format:
+All endpoints return errors in **RFC 7807 Problem Details** format: we use uber's zap logger to log
 
 ```json
 {

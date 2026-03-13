@@ -20,6 +20,9 @@ The Electron desktop app is TypeScript/React but communicates with Go exclusivel
 
 ## 2. Project Layout
 
+inside package we have each package 
+and inside each package we will have a model folder for all the interfaces and structs
+all request model from the ui needs to be end with Request, reponse should we end with Response validated and sanitized (use google's validator)
 ```
 silo/
 ├── cmd/
