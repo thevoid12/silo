@@ -7,6 +7,7 @@ import (
 	"google.golang.org/adk/tool"
 	"google.golang.org/adk/tool/functiontool"
 
+	approvalmodels "silo/pkg/approval/models"
 	siloerrors "silo/pkg/errors"
 	shellmodels "silo/pkg/shell/models"
 )
@@ -36,19 +37,34 @@ func NewShellTool(cfg shellmodels.ToolConfig) (tool.Tool, error) {
 		functiontool.Config{
 			Name:        "shell",
 			Description: "Execute a shell command in a sandboxed environment",
-			RequireConfirmationProvider: func(args shellmodels.ShellArgs) bool {
-				return e.policy.check(args.Command) == shellmodels.RequiresApproval
-			},
 		},
 		e.run,
 	)
 }
 
-// run executes the shell command after policy enforcement
+// run executes the shell command after policy and approval enforcement
 func (e *executor) run(tc tool.Context, args shellmodels.ShellArgs) (shellmodels.ShellResult, error) {
-	if e.policy.check(args.Command) == shellmodels.Deny {
+	decision := e.policy.check(args.Command)
+
+	if decision == shellmodels.Deny {
 		return shellmodels.ShellResult{}, fmt.Errorf("%w: %q", siloerrors.ErrCommandBlocked, args.Command)
 	}
+
+	if decision == shellmodels.RequiresApproval {
+		if e.cfg.Approval == nil {
+			return shellmodels.ShellResult{}, fmt.Errorf("%w: no approval service configured for %q", siloerrors.ErrCommandBlocked, args.Command)
+		}
+		approved, err := e.cfg.Approval.Request(tc, approvalmodels.ApprovalRequest{
+			ID:      tc.FunctionCallID(),
+			Tool:    "shell",
+			Command: args.Command,
+			Args:    args.Args,
+		})
+		if err != nil || !approved {
+			return shellmodels.ShellResult{}, fmt.Errorf("%w: %q", siloerrors.ErrCommandBlocked, args.Command)
+		}
+	}
+
 	env := buildSafeEnv(os.Environ(), e.cfg.SafeEnvKeys)
 	return e.sandbox.execute(tc, args, env)
 }

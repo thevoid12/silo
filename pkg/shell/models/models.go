@@ -2,6 +2,8 @@ package models
 
 import (
 	"time"
+
+	approvalmodels "silo/pkg/approval/models"
 )
 
 // PolicyDecision is the outcome of policy evaluation for a command
@@ -40,4 +42,5 @@ type ToolConfig struct {
 	Blocklist   []string
 	SafeEnvKeys []string
 	Exec        ExecConfig
+	Approval    approvalmodels.ApprovalService
 }

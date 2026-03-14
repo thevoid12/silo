@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"silo/pkg/approval"
+	approvalmodels "silo/pkg/approval/models"
 	siloerrors "silo/pkg/errors"
 	shellmodels "silo/pkg/shell/models"
 )
@@ -156,5 +158,60 @@ func TestExecutor_run_blocked(t *testing.T) {
 	_, err := e.run(nil, shellmodels.ShellArgs{Command: "rm", Args: []string{"-rf", "/"}})
 	if !errors.Is(err, siloerrors.ErrCommandBlocked) {
 		t.Errorf("expected ErrCommandBlocked, got %v", err)
+	}
+}
+
+func TestExecutor_run_requiresApproval_approved(t *testing.T) {
+	svc := approval.New(approvalmodels.ServiceConfig{Timeout: 2 * time.Second})
+	e := &executor{
+		policy:  newPolicy(nil, nil), // everything requires approval
+		sandbox: newSandbox(shellmodels.ExecConfig{Timeout: 5 * time.Second}),
+		cfg:     shellmodels.ToolConfig{SafeEnvKeys: defaultSafeEnvKeys, Approval: svc},
+	}
+
+	go func() {
+		r := <-svc.Requests()
+		svc.Respond(r.ID, true) //nolint:errcheck
+	}()
+
+	tc := testToolCtx{context.Background()}
+	result, err := e.run(tc, shellmodels.ShellArgs{Command: "echo", Args: []string{"hi"}})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if strings.TrimSpace(result.Stdout) != "hi" {
+		t.Errorf("expected stdout 'hi', got %q", result.Stdout)
+	}
+}
+
+func TestExecutor_run_requiresApproval_denied(t *testing.T) {
+	svc := approval.New(approvalmodels.ServiceConfig{Timeout: 2 * time.Second})
+	e := &executor{
+		policy:  newPolicy(nil, nil), // everything requires approval
+		sandbox: newSandbox(shellmodels.ExecConfig{Timeout: 5 * time.Second}),
+		cfg:     shellmodels.ToolConfig{SafeEnvKeys: defaultSafeEnvKeys, Approval: svc},
+	}
+
+	go func() {
+		r := <-svc.Requests()
+		svc.Respond(r.ID, false) //nolint:errcheck
+	}()
+
+	tc := testToolCtx{context.Background()}
+	_, err := e.run(tc, shellmodels.ShellArgs{Command: "curl", Args: []string{"http://example.com"}})
+	if !errors.Is(err, siloerrors.ErrCommandBlocked) {
+		t.Errorf("expected ErrCommandBlocked, got %v", err)
+	}
+}
+
+func TestExecutor_run_requiresApproval_noService(t *testing.T) {
+	e := &executor{
+		policy:  newPolicy(nil, nil), // everything requires approval
+		sandbox: newSandbox(shellmodels.ExecConfig{Timeout: 5 * time.Second}),
+		cfg:     shellmodels.ToolConfig{SafeEnvKeys: defaultSafeEnvKeys, Approval: nil},
+	}
+	_, err := e.run(nil, shellmodels.ShellArgs{Command: "curl"})
+	if !errors.Is(err, siloerrors.ErrCommandBlocked) {
+		t.Errorf("expected ErrCommandBlocked when no approval service, got %v", err)
 	}
 }
