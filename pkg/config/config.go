@@ -42,12 +42,13 @@ func SetDefaults() {
 	viper.SetDefault("tools.approval.timeout", 30)
 	viper.SetDefault("tools.approval.rules.bash", "always")
 
-	// Shell defaults
+	// Shell defaults — only read-only observation commands are pre-approved.
+	// Everything that can modify files, run scripts, or make network calls requires approval.
 	viper.SetDefault("tools.shell.allowed_commands", []string{
-		"ls", "cat", "head", "tail", "wc", "grep", "find", "echo",
-		"date", "pwd", "whoami", "uname", "curl", "wget",
-		"python3", "node", "ruby", "git", "mkdir", "touch", "cp", "mv",
+		"ls", "cat", "head", "tail", "wc", "grep", "find",
+		"date", "pwd", "whoami", "uname", "df", "du", "ps", "env",
 	})
+	viper.SetDefault("tools.shell.permissions_file", filepath.Join(DefaultDataDir(), "allowed_permissions.md"))
 	viper.SetDefault("tools.shell.blocked_patterns", []string{
 		"rm -rf /", "dd if=/dev/zero", "sudo", "su", "eval", "exec",
 		"nc", "ncat", "netcat", "ssh", "scp", "chmod 777",

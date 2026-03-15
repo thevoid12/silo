@@ -24,13 +24,16 @@ func newSandbox(cfg shellmodels.ExecConfig) *sandbox {
 	return &sandbox{cfg: cfg}
 }
 
-// execute runs a command in an isolated temp dir with timeout and output limits
+// execute runs a command in the configured working directory with timeout and output limits
 func (s *sandbox) execute(ctx context.Context, args shellmodels.ShellArgs, env []string) (shellmodels.ShellResult, error) {
-	dir, err := os.MkdirTemp("", "silo-sandbox-")
-	if err != nil {
-		return shellmodels.ShellResult{}, fmt.Errorf("%w: %w", siloerrors.ErrSandboxCreate, err)
+	dir := s.cfg.WorkDir // TODO: we need to change to some configurable system directory
+	if dir == "" {
+		var err error
+		dir, err = os.Getwd()
+		if err != nil {
+			return shellmodels.ShellResult{}, fmt.Errorf("%w: %w", siloerrors.ErrSandboxCreate, err)
+		}
 	}
-	defer os.RemoveAll(dir)
 
 	timeout := s.cfg.Timeout
 	if timeout <= 0 {
@@ -39,7 +42,7 @@ func (s *sandbox) execute(ctx context.Context, args shellmodels.ShellArgs, env [
 	tctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(tctx, args.Command, args.Args...)
+	cmd := exec.CommandContext(tctx, "sh", "-c", args.Command)
 	cmd.Dir = dir
 	cmd.Env = env
 	if args.Stdin != "" {

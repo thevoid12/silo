@@ -17,34 +17,76 @@ var defaultSafeEnvKeys = []string{
 	"TZ", "TMPDIR", "XDG_RUNTIME_DIR",
 }
 
+// shellToolDescription instructs the LLM: command is the full shell string, run exactly as typed in a terminal
+const shellToolDescription = `Execute a shell command on the user's computer.
+
+Set "command" to the full shell string exactly as you would type it in a terminal.
+All shell features work: pipes, redirection, variables, quoting, &&, ;, etc.
+
+Examples:
+  "ls -la"
+  "echo 'hello, silo' > hello_silo.txt"
+  "grep -r 'pattern' . | head -20"
+  "mkdir -p foo && echo done > foo/result.txt"
+  "cat /etc/os-release"
+  "pwd && ls"
+
+Do NOT split the command into separate fields — put the entire command in "command".`
+
 type executor struct {
 	policy  *shellPolicy
 	sandbox *sandbox
 	cfg     shellmodels.ToolConfig
 }
 
-// NewShellTool creates an ADK FunctionTool that runs shell commands with policy enforcement and sandboxing
-func NewShellTool(cfg shellmodels.ToolConfig) (tool.Tool, error) {
+// AddAllowed adds a command to the runtime allowlist (implements shellmodels.PermissionsUpdater)
+func (e *executor) AddAllowed(cmd string) {
+	e.policy.addAllowed(cmd)
+}
+
+// NewShellTool creates an ADK FunctionTool that runs shell commands with policy enforcement.
+// Returns the tool, a PermissionsUpdater for runtime allowlist changes, and any error.
+func NewShellTool(cfg shellmodels.ToolConfig) (tool.Tool, shellmodels.PermissionsUpdater, error) {
 	if len(cfg.SafeEnvKeys) == 0 {
 		cfg.SafeEnvKeys = defaultSafeEnvKeys
 	}
+
+	allowlist := cfg.Allowlist
+	if cfg.PermissionsFile != "" {
+		saved, err := loadPermissions(cfg.PermissionsFile)
+		if err != nil {
+			return nil, nil, fmt.Errorf("load permissions file: %w", err)
+		}
+		allowlist = append(allowlist, saved...)
+	}
+
 	e := &executor{
-		policy:  newPolicy(cfg.Allowlist, cfg.Blocklist),
+		policy:  newPolicy(allowlist, cfg.Blocklist),
 		sandbox: newSandbox(cfg.Exec),
 		cfg:     cfg,
 	}
-	return functiontool.New[shellmodels.ShellArgs, shellmodels.ShellResult](
+	t, err := functiontool.New[shellmodels.ShellArgs, shellmodels.ShellResult](
 		functiontool.Config{
 			Name:        "shell",
-			Description: "Execute a shell command in a sandboxed environment",
+			Description: shellToolDescription,
 		},
 		e.run,
 	)
+	if err != nil {
+		return nil, nil, err
+	}
+	return t, e, nil
 }
 
-// run executes the shell command after policy and approval enforcement
+// run executes the shell command after policy and approval enforcement.
+// Policy is checked against the first word of the command string.
 func (e *executor) run(tc tool.Context, args shellmodels.ShellArgs) (shellmodels.ShellResult, error) {
-	decision := e.policy.check(args.Command)
+	if args.Command == "" {
+		return shellmodels.ShellResult{}, fmt.Errorf("%w: command must not be empty", siloerrors.ErrCommandBlocked)
+	}
+
+	firstWord := firstWordOf(args.Command)
+	decision := e.policy.check(firstWord)
 
 	if decision == shellmodels.Deny {
 		return shellmodels.ShellResult{}, fmt.Errorf("%w: %q", siloerrors.ErrCommandBlocked, args.Command)
@@ -58,7 +100,6 @@ func (e *executor) run(tc tool.Context, args shellmodels.ShellArgs) (shellmodels
 			ID:      tc.FunctionCallID(),
 			Tool:    "shell",
 			Command: args.Command,
-			Args:    args.Args,
 		})
 		if err != nil || !approved {
 			return shellmodels.ShellResult{}, fmt.Errorf("%w: %q", siloerrors.ErrCommandBlocked, args.Command)

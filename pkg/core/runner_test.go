@@ -17,11 +17,11 @@ func TestNewRunner(t *testing.T) {
 		t.Fatalf("Build failed: %v", err)
 	}
 
-	r, err := NewRunner("silo", a)
+	sr, err := NewRunner("silo", a)
 	if err != nil {
 		t.Fatalf("NewRunner failed: %v", err)
 	}
-	if r == nil {
-		t.Fatal("expected non-nil runner")
+	if sr == nil || sr.Runner == nil || sr.Sessions == nil {
+		t.Fatal("expected non-nil SiloRunner with Runner and Sessions")
 	}
 }

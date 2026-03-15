@@ -1,6 +1,83 @@
-[logger]
-filepath = "silo.logs"
-level = "debug"
+# Silo project defaults — developer-managed.
+# Changes here propagate to all users on next run.
+# Users override specific keys in ~/.silo/silo.toml.
 
-[app]
-port = "8080"
+[providers]
+default = "gemini"
+
+[providers.gemini]
+model = "gemini-2.0-flash"
+
+[providers.openai]
+model = "gpt-4o"
+
+[agent]
+max_iterations = 25
+retry_on_error = 1
+retry_backoff_ms = 1000
+system_prompt_path = "config/sys_prompt.toml"
+
+[tools.approval]
+mode = "per-tool"
+timeout = 30
+
+[tools.approval.rules]
+bash = "always"
+
+# Read-only observation commands — run without asking permission.
+# Everything else (echo, sh, git, curl, mkdir, etc.) requires approval.
+[tools.shell]
+allowed_commands = [
+  "ls", "cat", "head", "tail", "wc", "grep", "find",
+  "date", "pwd", "whoami", "uname", "df", "du", "ps", "env",
+]
+blocked_patterns = [
+  "sudo", "su", "dd", "mkfs", "shred",
+  "nc", "ncat", "netcat",
+  "chmod 777",
+]
+max_output_bytes = 1048576
+timeout_secs = 30
+
+[tools.sandbox]
+enabled = true
+max_output_size = "50mb"
+cleanup_orphans_after = "1h"
+direct_commands = ["ls", "cat", "head", "tail", "grep", "find", "wc", "date", "pwd", "whoami", "uname"]
+
+[tools.filesystem]
+working_directory = "~"
+allowed_paths = ["~/", "/tmp"]
+blocked_paths = ["~/.ssh", "~/.gnupg", "~/.silo/vault.enc", "~/.aws", "~/.kube", "~/.config/gcloud"]
+max_read_size = "10mb"
+max_write_size = "50mb"
+
+[tools.environment]
+passthrough_all = false
+
+[gateway]
+host = "127.0.0.1"
+port = 5110
+brain_enabled = true
+max_request_size = "10mb"
+cors_origins = ["*"]
+
+[gateway.auth]
+enabled = true
+
+[gateway.timeouts]
+read = "30s"
+write = "60s"
+idle = "120s"
+
+[logging]
+level = "info"
+format = "auto"
+
+[session]
+retention_days = 30
+
+[vault.argon2]
+memory_mib = 8
+iterations = 8
+parallelism = 2

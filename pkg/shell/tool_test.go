@@ -31,6 +31,24 @@ func TestExtractBaseCmd(t *testing.T) {
 	}
 }
 
+func TestFirstWordOf(t *testing.T) {
+	cases := []struct {
+		input string
+		want  string
+	}{
+		{"ls -la", "ls"},
+		{"echo 'hello' > file.txt", "echo"},
+		{"sh", "sh"},
+		{"  pwd  ", "pwd"},
+	}
+	for _, c := range cases {
+		got := firstWordOf(c.input)
+		if got != c.want {
+			t.Errorf("firstWordOf(%q) = %q, want %q", c.input, got, c.want)
+		}
+	}
+}
+
 func TestShellPolicy_check(t *testing.T) {
 	p := newPolicy([]string{"ls", "echo"}, []string{"rm", "dd"})
 
@@ -77,8 +95,7 @@ func TestBuildSafeEnv(t *testing.T) {
 func TestSandbox_execute_success(t *testing.T) {
 	s := newSandbox(shellmodels.ExecConfig{Timeout: 5 * time.Second})
 	result, err := s.execute(context.Background(), shellmodels.ShellArgs{
-		Command: "echo",
-		Args:    []string{"hello"},
+		Command: "echo hello",
 	}, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -94,8 +111,7 @@ func TestSandbox_execute_success(t *testing.T) {
 func TestSandbox_execute_nonzeroExit(t *testing.T) {
 	s := newSandbox(shellmodels.ExecConfig{Timeout: 5 * time.Second})
 	result, err := s.execute(context.Background(), shellmodels.ShellArgs{
-		Command: "sh",
-		Args:    []string{"-c", "exit 42"},
+		Command: "exit 42",
 	}, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -108,8 +124,7 @@ func TestSandbox_execute_nonzeroExit(t *testing.T) {
 func TestSandbox_execute_timeout(t *testing.T) {
 	s := newSandbox(shellmodels.ExecConfig{Timeout: 50 * time.Millisecond})
 	_, err := s.execute(context.Background(), shellmodels.ShellArgs{
-		Command: "sleep",
-		Args:    []string{"10"},
+		Command: "sleep 10",
 	}, nil)
 	if !errors.Is(err, siloerrors.ErrCommandTimeout) {
 		t.Errorf("expected ErrCommandTimeout, got %v", err)
@@ -122,8 +137,7 @@ func TestSandbox_execute_outputTruncation(t *testing.T) {
 		MaxOutputBytes: 10,
 	})
 	result, err := s.execute(context.Background(), shellmodels.ShellArgs{
-		Command: "sh",
-		Args:    []string{"-c", "echo 12345678901234567890"},
+		Command: "echo 12345678901234567890",
 	}, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -136,8 +150,21 @@ func TestSandbox_execute_outputTruncation(t *testing.T) {
 	}
 }
 
+func TestSandbox_execute_redirectionAndPipes(t *testing.T) {
+	s := newSandbox(shellmodels.ExecConfig{Timeout: 5 * time.Second})
+	result, err := s.execute(context.Background(), shellmodels.ShellArgs{
+		Command: "echo pipetest | cat",
+	}, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if strings.TrimSpace(result.Stdout) != "pipetest" {
+		t.Errorf("expected stdout 'pipetest', got %q", result.Stdout)
+	}
+}
+
 func TestNewShellTool_creation(t *testing.T) {
-	tool, err := NewShellTool(shellmodels.ToolConfig{
+	tool, updater, err := NewShellTool(shellmodels.ToolConfig{
 		Allowlist: []string{"echo"},
 		Blocklist: []string{"rm"},
 	})
@@ -147,6 +174,9 @@ func TestNewShellTool_creation(t *testing.T) {
 	if tool.Name() != "shell" {
 		t.Errorf("expected tool name 'shell', got %q", tool.Name())
 	}
+	if updater == nil {
+		t.Error("expected non-nil PermissionsUpdater")
+	}
 }
 
 func TestExecutor_run_blocked(t *testing.T) {
@@ -155,7 +185,7 @@ func TestExecutor_run_blocked(t *testing.T) {
 		sandbox: newSandbox(shellmodels.ExecConfig{Timeout: 5 * time.Second}),
 		cfg:     shellmodels.ToolConfig{SafeEnvKeys: defaultSafeEnvKeys},
 	}
-	_, err := e.run(nil, shellmodels.ShellArgs{Command: "rm", Args: []string{"-rf", "/"}})
+	_, err := e.run(nil, shellmodels.ShellArgs{Command: "rm -rf /"})
 	if !errors.Is(err, siloerrors.ErrCommandBlocked) {
 		t.Errorf("expected ErrCommandBlocked, got %v", err)
 	}
@@ -175,7 +205,7 @@ func TestExecutor_run_requiresApproval_approved(t *testing.T) {
 	}()
 
 	tc := testToolCtx{context.Background()}
-	result, err := e.run(tc, shellmodels.ShellArgs{Command: "echo", Args: []string{"hi"}})
+	result, err := e.run(tc, shellmodels.ShellArgs{Command: "echo hi"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -198,7 +228,7 @@ func TestExecutor_run_requiresApproval_denied(t *testing.T) {
 	}()
 
 	tc := testToolCtx{context.Background()}
-	_, err := e.run(tc, shellmodels.ShellArgs{Command: "curl", Args: []string{"http://example.com"}})
+	_, err := e.run(tc, shellmodels.ShellArgs{Command: "curl http://example.com"})
 	if !errors.Is(err, siloerrors.ErrCommandBlocked) {
 		t.Errorf("expected ErrCommandBlocked, got %v", err)
 	}
@@ -210,7 +240,7 @@ func TestExecutor_run_requiresApproval_noService(t *testing.T) {
 		sandbox: newSandbox(shellmodels.ExecConfig{Timeout: 5 * time.Second}),
 		cfg:     shellmodels.ToolConfig{SafeEnvKeys: defaultSafeEnvKeys, Approval: nil},
 	}
-	_, err := e.run(nil, shellmodels.ShellArgs{Command: "curl"})
+	_, err := e.run(nil, shellmodels.ShellArgs{Command: "curl http://example.com"})
 	if !errors.Is(err, siloerrors.ErrCommandBlocked) {
 		t.Errorf("expected ErrCommandBlocked when no approval service, got %v", err)
 	}

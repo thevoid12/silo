@@ -3,11 +3,13 @@ package shell
 import (
 	"path/filepath"
 	"strings"
+	"sync"
 
 	shellmodels "silo/pkg/shell/models"
 )
 
 type shellPolicy struct {
+	mu        sync.RWMutex
 	allowlist map[string]struct{}
 	blocklist map[string]struct{}
 }
@@ -30,6 +32,8 @@ func newPolicy(allow, block []string) *shellPolicy {
 // check returns the policy decision for the given command
 func (p *shellPolicy) check(cmd string) shellmodels.PolicyDecision {
 	base := extractBaseCmd(cmd)
+	p.mu.RLock()
+	defer p.mu.RUnlock()
 	if _, ok := p.blocklist[base]; ok {
 		return shellmodels.Deny
 	}
@@ -39,9 +43,25 @@ func (p *shellPolicy) check(cmd string) shellmodels.PolicyDecision {
 	return shellmodels.RequiresApproval
 }
 
+// addAllowed inserts a command into the runtime allowlist
+func (p *shellPolicy) addAllowed(cmd string) {
+	p.mu.Lock()
+	p.allowlist[strings.ToLower(cmd)] = struct{}{}
+	p.mu.Unlock()
+}
+
 // extractBaseCmd returns the lowercase binary name, stripping any path prefix
 func extractBaseCmd(cmd string) string {
 	return strings.ToLower(filepath.Base(cmd))
+}
+
+// firstWordOf returns the first whitespace-delimited token of a shell command string
+func firstWordOf(cmd string) string {
+	cmd = strings.TrimSpace(cmd)
+	if idx := strings.IndexAny(cmd, " \t"); idx != -1 {
+		return cmd[:idx]
+	}
+	return cmd
 }
 
 // buildSafeEnv filters the current process env to only include the allowed keys

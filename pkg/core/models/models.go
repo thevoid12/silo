@@ -4,6 +4,8 @@ import (
 	"context"
 
 	"google.golang.org/adk/model"
+	"google.golang.org/adk/runner"
+	"google.golang.org/adk/session"
 	"google.golang.org/adk/tool"
 )
 
@@ -32,3 +34,9 @@ type BuildConfig struct {
 
 // ModelFactory creates a model.LLM for the given model name and API key
 type ModelFactory func(ctx context.Context, modelName, apiKey string) (model.LLM, error)
+
+// SiloRunner bundles the ADK runner with its session service so callers can create sessions
+type SiloRunner struct {
+	Runner   *runner.Runner
+	Sessions session.Service
+}

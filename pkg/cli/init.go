@@ -114,10 +114,8 @@ func runInteractive(v models.SecretVault) error {
 	}
 	v.Close()
 
-	viper.Set("providers.default", provider)
-
 	configPath := config.DefaultConfigPath()
-	if err := viper.WriteConfigAs(configPath); err != nil {
+	if err := writeMinimalConfig(configPath, provider); err != nil {
 		return fmt.Errorf("write config: %w", err)
 	}
 
@@ -160,15 +158,20 @@ func runNonInteractive(v models.SecretVault) error {
 	}
 	v.Close()
 
-	viper.Set("providers.default", provider)
-
 	configPath := config.DefaultConfigPath()
-	if err := viper.WriteConfigAs(configPath); err != nil {
+	if err := writeMinimalConfig(configPath, provider); err != nil {
 		return fmt.Errorf("write config: %w", err)
 	}
 
 	fmt.Println("Silo initialized successfully")
 	return nil
+}
+
+// writeMinimalConfig writes only user-specific settings to the personal config file.
+// All other values come from config/silo.toml (project defaults) or code defaults.
+func writeMinimalConfig(path, provider string) error {
+	content := fmt.Sprintf("[providers]\ndefault = %q\n", provider)
+	return os.WriteFile(path, []byte(content), 0600)
 }
 
 func readPass() (string, error) {

@@ -1,1 +1,2 @@
 - [ ] without hardcoding we need to support all the models leveraging ADK
+- [ ] allow running things in isolated folder but can access any part of  file system
