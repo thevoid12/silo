@@ -171,7 +171,7 @@ func runServe() error {
 
 	approvalSvc := approval.New(approvalmodels.ServiceConfig{Timeout: approvalTimeout})
 
-	dbPath := viper.GetString("session.db_path")
+	dbPath := config.ExpandPath(viper.GetString("session.db_path"))
 	if dbPath == "" {
 		return fmt.Errorf("session.db_path must be set in config")
 	}
@@ -181,10 +181,6 @@ func runServe() error {
 	}
 
 	sysPromptPath := viper.GetString("agent.system_prompt_path")
-	if sysPromptPath == "" {
-		return fmt.Errorf("system prompt path must be set in config")
-
-	}
 	agentCoreCfg := coremodels.BuildConfig{
 		Agent: coremodels.AgentConfig{
 			Name:             "silo",

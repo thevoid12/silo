@@ -14,6 +14,15 @@ func DefaultDataDir() string {
 	return filepath.Join(home, ".silo")
 }
 
+// ExpandPath expands a leading ~ to the user home directory.
+func ExpandPath(p string) string {
+	if len(p) == 0 || p[0] != '~' {
+		return p
+	}
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, p[1:])
+}
+
 // DefaultConfigPath returns the default config file path
 func DefaultConfigPath() string {
 	return filepath.Join(DefaultDataDir(), "silo.toml")

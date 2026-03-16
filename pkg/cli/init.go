@@ -2,6 +2,8 @@ package cli
 
 import (
 	"bufio"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"strings"
@@ -18,6 +20,13 @@ import (
 
 var nonInteractive bool
 
+var projectConfigBytes []byte
+
+// SetProjectConfig stores the embedded config/silo.toml for use during init.
+func SetProjectConfig(b []byte) {
+	projectConfigBytes = b
+}
+
 var initCmd = &cobra.Command{
 	Use:   "init",
 	Short: "Initialize Silo configuration and vault",
@@ -27,7 +36,8 @@ This command will:
   1. Create the data directory (~/.silo/)
   2. Set up the encrypted vault with a password
   3. Configure your LLM provider and API key
-  4. Write the default configuration file
+  4. Generate a gateway bearer token
+  5. Write the default configuration file
 
 For automated/headless setup, use --non-interactive with environment variables:
   SILO_VAULT_PASSWORD, SILO_PROVIDER, SILO_API_KEY`,
@@ -62,22 +72,22 @@ func runInteractive(v models.SecretVault) error {
 	}
 
 	fmt.Println("Step 1: Create encrypted vault")
-	fmt.Print("Enter vault password (min 8 chars): ")
-	pass1, err := readPass()
+	pass1, err := readPasswordMasked("Enter vault password (min 8 chars): ")
 	if err != nil {
 		return err
 	}
 
-	fmt.Print("Confirm password: ")
-	pass2, err := readPass()
+	pass2, err := readPasswordMasked("Confirm password: ")
 	if err != nil {
 		return err
 	}
 
 	if pass1 != pass2 {
+		fmt.Fprintln(os.Stderr, "Error: passwords do not match")
 		return fmt.Errorf("passwords do not match")
 	}
 	if len(pass1) < 8 {
+		fmt.Fprintln(os.Stderr, "Error: password must be at least 8 characters")
 		return fmt.Errorf("password must be at least 8 characters")
 	}
 
@@ -98,12 +108,10 @@ func runInteractive(v models.SecretVault) error {
 		provider = "gemini"
 	}
 
-	fmt.Printf("Enter %s API key: ", provider)
-	apiKey, err := readPass()
+	apiKey, err := readPasswordMasked(fmt.Sprintf("Enter %s API key: ", provider))
 	if err != nil {
 		return err
 	}
-
 	if apiKey == "" {
 		return fmt.Errorf("API key cannot be empty")
 	}
@@ -112,16 +120,27 @@ func runInteractive(v models.SecretVault) error {
 	if err := v.WriteSecret(keyName, []byte(apiKey)); err != nil {
 		return err
 	}
+
+	token, err := generateToken()
+	if err != nil {
+		return fmt.Errorf("generate gateway token: %w", err)
+	}
+	if err := v.WriteSecret("gateway-token", []byte(token)); err != nil {
+		return err
+	}
 	v.Close()
 
 	configPath := config.DefaultConfigPath()
-	if err := writeMinimalConfig(configPath, provider); err != nil {
+	if err := writeUserConfig(configPath); err != nil {
 		return fmt.Errorf("write config: %w", err)
 	}
 
 	fmt.Println()
 	fmt.Println("Silo initialized successfully!")
-	fmt.Printf("Config: %s\n", configPath)
+	fmt.Printf("Config:        %s\n", configPath)
+	fmt.Printf("Gateway token: %s\n", token)
+	fmt.Println()
+	fmt.Println("Keep your gateway token safe — you need it to authenticate API requests.")
 	return nil
 }
 
@@ -139,7 +158,6 @@ func runNonInteractive(v models.SecretVault) error {
 	if provider == "" {
 		provider = "gemini"
 	}
-
 	if len(password) < 8 {
 		return fmt.Errorf("SILO_VAULT_PASSWORD must be at least 8 characters")
 	}
@@ -156,24 +174,83 @@ func runNonInteractive(v models.SecretVault) error {
 	if err := v.WriteSecret(keyName, []byte(apiKey)); err != nil {
 		return err
 	}
+
+	token, err := generateToken()
+	if err != nil {
+		return fmt.Errorf("generate gateway token: %w", err)
+	}
+	if err := v.WriteSecret("gateway-token", []byte(token)); err != nil {
+		return err
+	}
 	v.Close()
 
 	configPath := config.DefaultConfigPath()
-	if err := writeMinimalConfig(configPath, provider); err != nil {
+	if err := writeUserConfig(configPath); err != nil {
 		return fmt.Errorf("write config: %w", err)
 	}
 
 	fmt.Println("Silo initialized successfully")
+	fmt.Printf("Gateway token: %s\n", token)
 	return nil
 }
 
-// writeMinimalConfig writes only user-specific settings to the personal config file.
-// All other values come from config/silo.toml (project defaults) or code defaults.
-func writeMinimalConfig(path, provider string) error {
-	content := fmt.Sprintf("[providers]\ndefault = %q\n", provider)
-	return os.WriteFile(path, []byte(content), 0600)
+// writeUserConfig copies the embedded project config to the user config path.
+func writeUserConfig(path string) error {
+	return os.WriteFile(path, projectConfigBytes, 0600)
 }
 
+// generateToken returns a 32-byte cryptographically random hex token.
+func generateToken() (string, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b), nil
+}
+
+// readPasswordMasked prompts the user and reads a password showing * for each character.
+func readPasswordMasked(prompt string) (string, error) {
+	fmt.Print(prompt)
+
+	oldState, err := term.MakeRaw(int(syscall.Stdin))
+	if err != nil {
+		// fallback to silent read if raw mode unavailable
+		pass, err := term.ReadPassword(int(syscall.Stdin))
+		fmt.Println()
+		return string(pass), err
+	}
+	defer term.Restore(int(syscall.Stdin), oldState)
+
+	var buf []byte
+	b := make([]byte, 1)
+	for {
+		if _, err := os.Stdin.Read(b); err != nil {
+			break
+		}
+		switch b[0] {
+		case '\r', '\n':
+			fmt.Print("\r\n")
+			return string(buf), nil
+		case 3: // Ctrl+C
+			fmt.Print("\r\n")
+			return "", fmt.Errorf("interrupted")
+		case 127, 8: // backspace / DEL
+			if len(buf) > 0 {
+				buf = buf[:len(buf)-1]
+				fmt.Print("\b \b")
+			}
+		default:
+			if b[0] >= 32 { // printable
+				buf = append(buf, b[0])
+				fmt.Print("*")
+			}
+		}
+	}
+	fmt.Print("\r\n")
+	return string(buf), nil
+}
+
+// readPass is kept for backward compat with start.go which calls it.
 func readPass() (string, error) {
 	pass, err := term.ReadPassword(int(syscall.Stdin))
 	fmt.Println()

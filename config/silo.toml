@@ -58,7 +58,6 @@ passthrough_all = false
 [gateway]
 host = "127.0.0.1"
 port = 5110
-pid_file = "~/.silo/silo.pid"
 brain_enabled = true
 max_request_size = "10mb"
 cors_origins = ["*"]

@@ -270,19 +270,25 @@ go build -o silo ./cmd/silo
 Run these checks to confirm the gateway works for external adapters:
 
 ```bash
+go build -o silo
+# if first time 
+./silo init
 # 1. Start server
 ./silo start
 # -> server listening on :8420
+# get gateway token
+./silo vault get gatway-token
+# Copy that value — you'll use it as <TOKEN> below.
 
 # 2. Health check
-curl http://localhost:8420/health
+curl http://localhost:5110/health
 # -> 200 OK
 
 # 3. Chat via SSE
 curl -N -H "Authorization: Bearer <token>" \
      -H "Content-Type: application/json" \
      -d '{"message": "List files in the workspace"}' \
-     http://localhost:8420/silo/brain/chat
+     http://localhost:5110/silo/brain/chat
 # -> SSE stream: token events, tool_call, tool_result, done
 
 # 4. Tool approval flow
@@ -290,7 +296,7 @@ curl -N -H "Authorization: Bearer <token>" \
 curl -H "Authorization: Bearer <token>" \
      -H "Content-Type: application/json" \
      -d '{"request_id": "<id>", "approved": true}' \
-     http://localhost:8420/silo/brain/tool-approval
+     http://localhost:5110/silo/brain/tool-approval
 # -> 200 OK, SSE stream resumes
 
 # 5. Stop server
