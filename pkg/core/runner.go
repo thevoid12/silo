@@ -8,9 +8,12 @@ import (
 	coremodels "silo/pkg/core/models"
 )
 
-// NewRunner creates an ADK Runner for the given agent and returns it with its session service
-func NewRunner(appName string, a agent.Agent) (*coremodels.SiloRunner, error) {
-	svc := session.InMemoryService()
+// NewRunner creates an ADK Runner for the given agent.
+// If svc is nil, a fresh in-memory session service is created.
+func NewRunner(appName string, a agent.Agent, svc session.Service) (*coremodels.SiloRunner, error) {
+	if svc == nil {
+		svc = session.InMemoryService()
+	}
 	r, err := runner.New(runner.Config{
 		AppName:        appName,
 		Agent:          a,

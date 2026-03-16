@@ -17,7 +17,7 @@ func TestNewRunner(t *testing.T) {
 		t.Fatalf("Build failed: %v", err)
 	}
 
-	sr, err := NewRunner("silo", a)
+	sr, err := NewRunner("silo", a, nil)
 	if err != nil {
 		t.Fatalf("NewRunner failed: %v", err)
 	}

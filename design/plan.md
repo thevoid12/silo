@@ -255,7 +255,8 @@ go build -o silo ./cmd/silo
 ### Step 12 — Session persistence via ADK DatabaseSessionService
 
 - ADK provides `DatabaseSessionService` backed by SQLite
-- Configure ADK runner to use `modernc.org/sqlite` as the driver via `sqlx`
+- Configure ADK runner to use `mattn/sqlite` as the driver via `sqlx`
+- the database file structure is already present,sqlx,dbal etc follow that
 - Sessions persist across server restarts
 - Session ID returned on first chat, client sends it on subsequent requests
 

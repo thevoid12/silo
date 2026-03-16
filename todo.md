@@ -1,2 +1,5 @@
 - [ ] without hardcoding we need to support all the models leveraging ADK
-- [ ] allow running things in isolated folder but can access any part of  file system
+- [ ] allow running things in isolated folder but can access any part of file system
+- [ ] we need to go through each errors and see if all errors we are using error codes
+- [ ] we need to manually check if viper empty case is handled everytime
+- [ ] need to make sure every error case is logged using our zap logger

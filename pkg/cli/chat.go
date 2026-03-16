@@ -134,7 +134,7 @@ func runChat(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to build agent: %w", err)
 	}
 
-	siloRunner, err := core.NewRunner("silo", a)
+	siloRunner, err := core.NewRunner("silo", a, nil)
 	if err != nil {
 		return fmt.Errorf("failed to build runner: %w", err)
 	}

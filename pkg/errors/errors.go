@@ -78,4 +78,6 @@ var (
 	ErrPIDFileRead          = &SiloError{Code: CodePIDFileRead, Message: "failed to read PID file"}
 	ErrPIDFileWrite         = &SiloError{Code: CodePIDFileWrite, Message: "failed to write PID file"}
 	ErrGatewayTokenMissing  = &SiloError{Code: CodeGatewayTokenMissing, Message: "gateway token not found in vault: run \"silo init\" to set up your gateway token"}
+	ErrAPIKeyMissing        = &SiloError{Code: CodeGatewayTokenMissing + 1, Message: "API key not set: run \"silo init\" to configure your provider"}
+	ErrProviderMissing      = &SiloError{Code: CodeGatewayTokenMissing + 2, Message: "provider not set: check gateway.provider in silo.toml or run \"silo init\""}
 )
