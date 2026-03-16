@@ -55,6 +55,8 @@ func init() {
 	rootCmd.AddCommand(doctorCmd)
 	rootCmd.AddCommand(chatCmd)
 	rootCmd.AddCommand(startCmd)
+	rootCmd.AddCommand(stopCmd)
+	rootCmd.AddCommand(serverStatusCmd)
 	rootCmd.AddCommand(vaultCmd)
 }
 

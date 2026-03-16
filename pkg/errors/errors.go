@@ -37,6 +37,13 @@ const (
 	// Approval: 150+
 	CodeApprovalTimeout  = iota + 137 // starts at 150
 	CodeApprovalNotFound              // 151
+
+	// Gateway: 200-249
+	CodeServerAlreadyRunning = iota + 186 // starts at 200
+	CodeServerNotRunning                  // 201
+	CodePIDFileRead                       // 202
+	CodePIDFileWrite                      // 203
+	CodeGatewayTokenMissing               // 204
 )
 
 var (
@@ -64,4 +71,11 @@ var (
 	// Approval errors
 	ErrApprovalTimeout  = &SiloError{Code: CodeApprovalTimeout, Message: "approval request timed out — command denied"}
 	ErrApprovalNotFound = &SiloError{Code: CodeApprovalNotFound, Message: "no pending approval found for the given id"}
+
+	// Gateway errors
+	ErrServerAlreadyRunning = &SiloError{Code: CodeServerAlreadyRunning, Message: "server is already running: run \"silo stop\" first"}
+	ErrServerNotRunning     = &SiloError{Code: CodeServerNotRunning, Message: "server is not running"}
+	ErrPIDFileRead          = &SiloError{Code: CodePIDFileRead, Message: "failed to read PID file"}
+	ErrPIDFileWrite         = &SiloError{Code: CodePIDFileWrite, Message: "failed to write PID file"}
+	ErrGatewayTokenMissing  = &SiloError{Code: CodeGatewayTokenMissing, Message: "gateway token not found in vault: run \"silo init\" to set up your gateway token"}
 )

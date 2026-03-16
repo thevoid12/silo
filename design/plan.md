@@ -210,7 +210,7 @@ go build -o silo ./cmd/silo
 ## Phase C: Gateway + Headless (Adapter-Ready)
 
 ### Step 9 — Chi HTTP server with auth
-
+- chat,cli,electron app,external channels like telegram everything has common entry points and largely common core flow
 - `pkg/gateway/server.go` — gin router
 - Bearer token auth middleware (token from vault)
 - Endpoints:

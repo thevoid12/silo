@@ -24,6 +24,7 @@ func SetDefaults() {
 	// Gateway defaults
 	viper.SetDefault("gateway.host", "127.0.0.1")
 	viper.SetDefault("gateway.port", 5110)
+	viper.SetDefault("gateway.pid_file", filepath.Join(DefaultDataDir(), "silo.pid"))
 	viper.SetDefault("gateway.brain_enabled", true)
 	viper.SetDefault("gateway.max_request_size", "10mb")
 	viper.SetDefault("gateway.cors_origins", []string{"*"})
@@ -92,6 +93,7 @@ func SetDefaults() {
 	viper.SetDefault("logging.level", "info")
 	viper.SetDefault("logging.format", "auto")
 	viper.SetDefault("logging.log_dir", filepath.Join(DefaultDataDir(), "logs"))
+	viper.SetDefault("logger.filepath", filepath.Join(DefaultDataDir(), "logs", "silo.log"))
 
 	// Agent defaults
 	viper.SetDefault("agent.max_iterations", 25)
