@@ -40,3 +40,8 @@ type SiloRunner struct {
 	Runner   *runner.Runner
 	Sessions session.Service
 }
+
+// SessionConfig holds configuration for the SQLite-backed session service
+type SessionConfig struct {
+	DBPath string
+}

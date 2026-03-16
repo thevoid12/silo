@@ -80,7 +80,7 @@ func SetDefaults() {
 	viper.SetDefault("tools.sandbox.cleanup_orphans_after", "1h")
 
 	// Session defaults
-	viper.SetDefault("session.db_path", filepath.Join(DefaultDataDir(), "sessions.db"))
+	viper.SetDefault("session.db_path", filepath.Join(DefaultDataDir(), "silo.db"))
 	viper.SetDefault("session.retention_days", 30)
 
 	// Vault defaults

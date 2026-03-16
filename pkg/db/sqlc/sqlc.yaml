@@ -9,6 +9,6 @@ sql:
       go:
         package: "dbal"
         out: "../dbal"
-        sql_package: "sqlx"
+        sql_package: "database/sql"
         output_models_file_name: "dbmodels.go"
 

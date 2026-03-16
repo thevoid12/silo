@@ -76,6 +76,7 @@ level = "info"
 format = "auto"
 
 [session]
+db_path = "~/.silo/silo.db"
 retention_days = 30
 
 [vault.argon2]

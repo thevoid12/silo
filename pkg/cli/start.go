@@ -13,7 +13,6 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	adkrunner "google.golang.org/adk/runner"
-	"google.golang.org/adk/session"
 
 	"silo/pkg/approval"
 	approvalmodels "silo/pkg/approval/models"
@@ -171,7 +170,16 @@ func runServe() error {
 	permissionsFile := filepath.Join(config.DefaultDataDir(), "allowed_permissions.md")
 
 	approvalSvc := approval.New(approvalmodels.ServiceConfig{Timeout: approvalTimeout})
-	sharedSessions := session.InMemoryService()
+
+	dbPath := viper.GetString("session.db_path")
+	if dbPath == "" {
+		return fmt.Errorf("session.db_path must be set in config")
+	}
+	sharedSessions, err := core.NewSQLiteSessionService(coremodels.SessionConfig{DBPath: dbPath})
+	if err != nil {
+		return fmt.Errorf("init session store: %w", err)
+	}
+
 	sysPromptPath := viper.GetString("agent.system_prompt_path")
 	if sysPromptPath == "" {
 		return fmt.Errorf("system prompt path must be set in config")

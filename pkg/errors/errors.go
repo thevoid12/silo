@@ -44,6 +44,10 @@ const (
 	CodePIDFileRead                       // 202
 	CodePIDFileWrite                      // 203
 	CodeGatewayTokenMissing               // 204
+
+	// Database: 250-299
+	CodeDBOpen    = iota + 232 // starts at 250
+	CodeDBMigrate              // 251
 )
 
 var (
@@ -80,4 +84,8 @@ var (
 	ErrGatewayTokenMissing  = &SiloError{Code: CodeGatewayTokenMissing, Message: "gateway token not found in vault: run \"silo init\" to set up your gateway token"}
 	ErrAPIKeyMissing        = &SiloError{Code: CodeGatewayTokenMissing + 1, Message: "API key not set: run \"silo init\" to configure your provider"}
 	ErrProviderMissing      = &SiloError{Code: CodeGatewayTokenMissing + 2, Message: "provider not set: check gateway.provider in silo.toml or run \"silo init\""}
+
+	// Database errors
+	ErrDBOpen    = &SiloError{Code: CodeDBOpen, Message: "failed to open session database — check session.db_path in silo.toml"}
+	ErrDBMigrate = &SiloError{Code: CodeDBMigrate, Message: "failed to migrate session database schema"}
 )
