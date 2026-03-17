@@ -87,3 +87,12 @@ func (s *approvalService) Pending() []approvalmodels.ApprovalRequest {
 func (s *approvalService) Requests() <-chan approvalmodels.ApprovalRequest {
 	return s.requests
 }
+
+// GetPending returns a single pending request by ID
+func (s *approvalService) GetPending(id string) (approvalmodels.ApprovalRequest, error) {
+	val, ok := s.pending.Load(id)
+	if !ok {
+		return approvalmodels.ApprovalRequest{}, fmt.Errorf("%w: %q", siloerrors.ErrApprovalNotFound, id)
+	}
+	return val.(*approvalmodels.PendingEntry).Req, nil
+}

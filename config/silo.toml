@@ -19,7 +19,7 @@ system_prompt_path = "config/sys_prompt.toml"
 
 [tools.approval]
 mode = "per-tool"
-timeout = 30
+timeout = 120
 
 [tools.approval.rules]
 bash = "always"

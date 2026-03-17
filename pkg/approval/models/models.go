@@ -15,6 +15,8 @@ type ApprovalService interface {
 	Pending() []ApprovalRequest
 	// Requests returns the channel that UI layers listen on for incoming approval requests
 	Requests() <-chan ApprovalRequest
+	// GetPending returns a single pending request by ID, or error if not found
+	GetPending(id string) (ApprovalRequest, error)
 }
 
 // ApprovalRequest carries the context for a tool call awaiting user approval

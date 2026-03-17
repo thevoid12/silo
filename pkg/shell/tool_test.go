@@ -7,11 +7,15 @@ import (
 	"testing"
 	"time"
 
+	"go.uber.org/zap"
+
 	"silo/pkg/approval"
 	approvalmodels "silo/pkg/approval/models"
 	siloerrors "silo/pkg/errors"
 	shellmodels "silo/pkg/shell/models"
 )
+
+var nopLog = zap.NewNop().Sugar()
 
 func TestExtractBaseCmd(t *testing.T) {
 	cases := []struct {
@@ -93,7 +97,7 @@ func TestBuildSafeEnv(t *testing.T) {
 }
 
 func TestSandbox_execute_success(t *testing.T) {
-	s := newSandbox(shellmodels.ExecConfig{Timeout: 5 * time.Second})
+	s := newSandbox(shellmodels.ExecConfig{Timeout: 5 * time.Second}, nopLog)
 	result, err := s.execute(context.Background(), shellmodels.ShellArgs{
 		Command: "echo hello",
 	}, nil)
@@ -109,7 +113,7 @@ func TestSandbox_execute_success(t *testing.T) {
 }
 
 func TestSandbox_execute_nonzeroExit(t *testing.T) {
-	s := newSandbox(shellmodels.ExecConfig{Timeout: 5 * time.Second})
+	s := newSandbox(shellmodels.ExecConfig{Timeout: 5 * time.Second}, nopLog)
 	result, err := s.execute(context.Background(), shellmodels.ShellArgs{
 		Command: "exit 42",
 	}, nil)
@@ -122,7 +126,7 @@ func TestSandbox_execute_nonzeroExit(t *testing.T) {
 }
 
 func TestSandbox_execute_timeout(t *testing.T) {
-	s := newSandbox(shellmodels.ExecConfig{Timeout: 50 * time.Millisecond})
+	s := newSandbox(shellmodels.ExecConfig{Timeout: 50 * time.Millisecond}, nopLog)
 	_, err := s.execute(context.Background(), shellmodels.ShellArgs{
 		Command: "sleep 10",
 	}, nil)
@@ -135,7 +139,7 @@ func TestSandbox_execute_outputTruncation(t *testing.T) {
 	s := newSandbox(shellmodels.ExecConfig{
 		Timeout:        5 * time.Second,
 		MaxOutputBytes: 10,
-	})
+	}, nopLog)
 	result, err := s.execute(context.Background(), shellmodels.ShellArgs{
 		Command: "echo 12345678901234567890",
 	}, nil)
@@ -151,7 +155,7 @@ func TestSandbox_execute_outputTruncation(t *testing.T) {
 }
 
 func TestSandbox_execute_redirectionAndPipes(t *testing.T) {
-	s := newSandbox(shellmodels.ExecConfig{Timeout: 5 * time.Second})
+	s := newSandbox(shellmodels.ExecConfig{Timeout: 5 * time.Second}, nopLog)
 	result, err := s.execute(context.Background(), shellmodels.ShellArgs{
 		Command: "echo pipetest | cat",
 	}, nil)
@@ -182,8 +186,9 @@ func TestNewShellTool_creation(t *testing.T) {
 func TestExecutor_run_blocked(t *testing.T) {
 	e := &executor{
 		policy:  newPolicy(nil, []string{"rm"}),
-		sandbox: newSandbox(shellmodels.ExecConfig{Timeout: 5 * time.Second}),
+		sandbox: newSandbox(shellmodels.ExecConfig{Timeout: 5 * time.Second}, nopLog),
 		cfg:     shellmodels.ToolConfig{SafeEnvKeys: defaultSafeEnvKeys},
+		log:     nopLog,
 	}
 	_, err := e.run(nil, shellmodels.ShellArgs{Command: "rm -rf /"})
 	if !errors.Is(err, siloerrors.ErrCommandBlocked) {
@@ -195,8 +200,9 @@ func TestExecutor_run_requiresApproval_approved(t *testing.T) {
 	svc := approval.New(approvalmodels.ServiceConfig{Timeout: 2 * time.Second})
 	e := &executor{
 		policy:  newPolicy(nil, nil), // everything requires approval
-		sandbox: newSandbox(shellmodels.ExecConfig{Timeout: 5 * time.Second}),
+		sandbox: newSandbox(shellmodels.ExecConfig{Timeout: 5 * time.Second}, nopLog),
 		cfg:     shellmodels.ToolConfig{SafeEnvKeys: defaultSafeEnvKeys, Approval: svc},
+		log:     nopLog,
 	}
 
 	go func() {
@@ -218,8 +224,9 @@ func TestExecutor_run_requiresApproval_denied(t *testing.T) {
 	svc := approval.New(approvalmodels.ServiceConfig{Timeout: 2 * time.Second})
 	e := &executor{
 		policy:  newPolicy(nil, nil), // everything requires approval
-		sandbox: newSandbox(shellmodels.ExecConfig{Timeout: 5 * time.Second}),
+		sandbox: newSandbox(shellmodels.ExecConfig{Timeout: 5 * time.Second}, nopLog),
 		cfg:     shellmodels.ToolConfig{SafeEnvKeys: defaultSafeEnvKeys, Approval: svc},
+		log:     nopLog,
 	}
 
 	go func() {
@@ -237,8 +244,9 @@ func TestExecutor_run_requiresApproval_denied(t *testing.T) {
 func TestExecutor_run_requiresApproval_noService(t *testing.T) {
 	e := &executor{
 		policy:  newPolicy(nil, nil), // everything requires approval
-		sandbox: newSandbox(shellmodels.ExecConfig{Timeout: 5 * time.Second}),
+		sandbox: newSandbox(shellmodels.ExecConfig{Timeout: 5 * time.Second}, nopLog),
 		cfg:     shellmodels.ToolConfig{SafeEnvKeys: defaultSafeEnvKeys, Approval: nil},
+		log:     nopLog,
 	}
 	_, err := e.run(nil, shellmodels.ShellArgs{Command: "curl http://example.com"})
 	if !errors.Is(err, siloerrors.ErrCommandBlocked) {

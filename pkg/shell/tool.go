@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"go.uber.org/zap"
 	"google.golang.org/adk/tool"
 	"google.golang.org/adk/tool/functiontool"
 
@@ -37,6 +38,7 @@ type executor struct {
 	policy  *shellPolicy
 	sandbox *sandbox
 	cfg     shellmodels.ToolConfig
+	log     *zap.SugaredLogger
 }
 
 // AddAllowed adds a command to the runtime allowlist (implements shellmodels.PermissionsUpdater)
@@ -60,10 +62,15 @@ func NewShellTool(cfg shellmodels.ToolConfig) (tool.Tool, shellmodels.Permission
 		allowlist = append(allowlist, saved...)
 	}
 
+	log := cfg.Logger
+	if log == nil {
+		log = zap.NewNop().Sugar()
+	}
 	e := &executor{
 		policy:  newPolicy(allowlist, cfg.Blocklist),
-		sandbox: newSandbox(cfg.Exec),
+		sandbox: newSandbox(cfg.Exec, log),
 		cfg:     cfg,
+		log:     log,
 	}
 	t, err := functiontool.New[shellmodels.ShellArgs, shellmodels.ShellResult](
 		functiontool.Config{
@@ -87,25 +94,35 @@ func (e *executor) run(tc tool.Context, args shellmodels.ShellArgs) (shellmodels
 
 	firstWord := firstWordOf(args.Command)
 	decision := e.policy.check(firstWord)
+	e.log.Infow("shell: policy check", "command", args.Command, "first_word", firstWord, "decision", decision)
 
 	if decision == shellmodels.Deny {
+		e.log.Warnw("shell: command blocked by policy", "command", args.Command)
 		return shellmodels.ShellResult{}, fmt.Errorf("%w: %q", siloerrors.ErrCommandBlocked, args.Command)
 	}
 
 	if decision == shellmodels.RequiresApproval {
 		if e.cfg.Approval == nil {
+			e.log.Errorw("shell: no approval service configured", "command", args.Command)
 			return shellmodels.ShellResult{}, fmt.Errorf("%w: no approval service configured for %q", siloerrors.ErrCommandBlocked, args.Command)
 		}
+		e.log.Infow("shell: requesting approval", "command", args.Command, "call_id", tc.FunctionCallID())
 		approved, err := e.cfg.Approval.Request(tc, approvalmodels.ApprovalRequest{
 			ID:      tc.FunctionCallID(),
 			Tool:    "shell",
 			Command: args.Command,
 		})
-		if err != nil || !approved {
+		if err != nil {
+			e.log.Errorw("shell: approval request failed", "command", args.Command, "error", err)
+			return shellmodels.ShellResult{}, fmt.Errorf("%w: %q", siloerrors.ErrApprovalTimeout, args.Command)
+		}
+		e.log.Infow("shell: approval received", "command", args.Command, "approved", approved)
+		if !approved {
 			return shellmodels.ShellResult{}, fmt.Errorf("%w: %q", siloerrors.ErrCommandBlocked, args.Command)
 		}
 	}
 
+	e.log.Infow("shell: proceeding to execute", "command", args.Command)
 	env := buildSafeEnv(os.Environ(), e.cfg.SafeEnvKeys)
 	return e.sandbox.execute(tc, args, env)
 }

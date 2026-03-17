@@ -168,17 +168,17 @@ func (s *server) streamAgentEvents(ctx context.Context, r *adkrunner.Runner, mes
 			}
 		}
 
+		if event.IsFinalResponse() {
+			send(gatewaymodels.SSEEvent{Name: gatewaymodels.SSEDone, Data: gatewaymodels.DonePayload{SessionID: sessionID}})
+			return
+		}
+
 		for _, part := range event.Content.Parts {
 			if part.Text != "" {
 				if !send(gatewaymodels.SSEEvent{Name: gatewaymodels.SSEToken, Data: gatewaymodels.TokenPayload{Text: part.Text}}) {
 					return
 				}
 			}
-		}
-
-		if event.IsFinalResponse() {
-			send(gatewaymodels.SSEEvent{Name: gatewaymodels.SSEDone, Data: gatewaymodels.DonePayload{SessionID: sessionID}})
-			return
 		}
 	}
 

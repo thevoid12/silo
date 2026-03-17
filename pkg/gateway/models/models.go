@@ -10,6 +10,8 @@ import (
 	approvalmodels "silo/pkg/approval/models"
 )
 
+
+
 // GatewayServer is the interface for the HTTP gateway server
 type GatewayServer interface {
 	Run() error
@@ -33,9 +35,10 @@ type ServerConfig struct {
 
 // ServerDeps holds runtime dependencies injected into the gateway server
 type ServerDeps struct {
-	Sessions  session.Service
-	Approval  approvalmodels.ApprovalService
-	NewRunner RunnerFactory
+	Sessions      session.Service
+	Approval      approvalmodels.ApprovalService
+	NewRunner     RunnerFactory
+	InferApproval ApprovalInferFunc
 }
 
 // StatusResponse is the response body for GET /silo/status
@@ -58,11 +61,16 @@ type ChatRequest struct {
 	SessionID string `json:"session_id"`
 }
 
-// ToolApprovalRequest is the request body for POST /silo/brain/tool-approval
+// ToolApprovalRequest is the request body for POST /silo/brain/tool-approval.
+// Either Approved (explicit bool) or Message (natural language) must be set.
 type ToolApprovalRequest struct {
 	RequestID string `json:"request_id" binding:"required"`
 	Approved  bool   `json:"approved"`
+	Message   string `json:"message"` // natural language; if set, LLM infers approved
 }
+
+// ApprovalInferFunc uses an LLM to classify a natural language response as approved or denied
+type ApprovalInferFunc func(ctx context.Context, userMessage, toolName, command string) (bool, error)
 
 // SSE event name constants
 const (

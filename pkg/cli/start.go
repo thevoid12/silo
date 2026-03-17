@@ -61,6 +61,12 @@ func spawnServer() error {
 		return fmt.Errorf("%w (PID %d)", siloerrors.ErrServerAlreadyRunning, pid)
 	}
 
+	// Remove stale user config if present — all settings now come from the embedded config.
+	// Users who want to override settings should use --config.
+	if cfgFile == "" {
+		os.Remove(config.DefaultConfigPath())
+	}
+
 	vaultPath := viper.GetString("vault.path")
 	v := vault.New(vaultPath)
 	if !v.Exists() {
@@ -82,7 +88,16 @@ func spawnServer() error {
 		return siloerrors.ErrGatewayTokenMissing
 	}
 
-	provider := viper.GetString("providers.default")
+	provider := ""
+	if providerBytes, err := v.ReadSecret("provider"); err == nil {
+		provider = string(providerBytes)
+	} else {
+		provider = viper.GetString("providers.default")
+	}
+	if provider == "" {
+		return siloerrors.ErrProviderMissing
+	}
+
 	apiKeyBytes, err := v.ReadSecret(fmt.Sprintf("%s_api_key", provider))
 	if err != nil {
 		return siloerrors.ErrAPIKeyMissing
@@ -198,6 +213,7 @@ func runServe() error {
 			Blocklist:       viper.GetStringSlice("tools.shell.blocked_patterns"),
 			Approval:        approvalSvc,
 			PermissionsFile: permissionsFile,
+			Logger:          log.Sugar(),
 			Exec: shellmodels.ExecConfig{
 				Timeout:        shellTimeout,
 				MaxOutputBytes: viper.GetInt("tools.shell.max_output_bytes"),
@@ -220,10 +236,13 @@ func runServe() error {
 		return sr.Runner, nil
 	}
 
+	inferApproval := core.BuildApprovalInferrer(coremodels.ProviderConfig{Provider: provider, LLMModel: llmModel}, apiKey)
+
 	deps := gatewaymodels.ServerDeps{
-		Sessions:  sharedSessions,
-		Approval:  approvalSvc,
-		NewRunner: runnerFactory,
+		Sessions:      sharedSessions,
+		Approval:      approvalSvc,
+		NewRunner:     runnerFactory,
+		InferApproval: inferApproval,
 	}
 
 	readTimeout := parseDurationWithDefault(log, "gateway.timeouts.read", 30*time.Second)

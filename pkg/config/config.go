@@ -49,7 +49,7 @@ func SetDefaults() {
 
 	// Tool approval defaults
 	viper.SetDefault("tools.approval.mode", "per-tool")
-	viper.SetDefault("tools.approval.timeout", 30)
+	viper.SetDefault("tools.approval.timeout", 120)
 	viper.SetDefault("tools.approval.rules.bash", "always")
 
 	// Shell defaults — only read-only observation commands are pre-approved.

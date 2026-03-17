@@ -120,6 +120,9 @@ func runInteractive(v models.SecretVault) error {
 	if err := v.WriteSecret(keyName, []byte(apiKey)); err != nil {
 		return err
 	}
+	if err := v.WriteSecret("provider", []byte(provider)); err != nil {
+		return err
+	}
 
 	token, err := generateToken()
 	if err != nil {
@@ -130,14 +133,8 @@ func runInteractive(v models.SecretVault) error {
 	}
 	v.Close()
 
-	configPath := config.DefaultConfigPath()
-	if err := writeUserConfig(configPath); err != nil {
-		return fmt.Errorf("write config: %w", err)
-	}
-
 	fmt.Println()
 	fmt.Println("Silo initialized successfully!")
-	fmt.Printf("Config:        %s\n", configPath)
 	fmt.Printf("Gateway token: %s\n", token)
 	fmt.Println()
 	fmt.Println("Keep your gateway token safe — you need it to authenticate API requests.")
@@ -174,6 +171,9 @@ func runNonInteractive(v models.SecretVault) error {
 	if err := v.WriteSecret(keyName, []byte(apiKey)); err != nil {
 		return err
 	}
+	if err := v.WriteSecret("provider", []byte(provider)); err != nil {
+		return err
+	}
 
 	token, err := generateToken()
 	if err != nil {
@@ -184,20 +184,11 @@ func runNonInteractive(v models.SecretVault) error {
 	}
 	v.Close()
 
-	configPath := config.DefaultConfigPath()
-	if err := writeUserConfig(configPath); err != nil {
-		return fmt.Errorf("write config: %w", err)
-	}
-
 	fmt.Println("Silo initialized successfully")
 	fmt.Printf("Gateway token: %s\n", token)
 	return nil
 }
 
-// writeUserConfig copies the embedded project config to the user config path.
-func writeUserConfig(path string) error {
-	return os.WriteFile(path, projectConfigBytes, 0600)
-}
 
 // generateToken returns a 32-byte cryptographically random hex token.
 func generateToken() (string, error) {

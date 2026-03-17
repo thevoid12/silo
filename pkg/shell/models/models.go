@@ -4,6 +4,7 @@ import (
 	"time"
 
 	approvalmodels "silo/pkg/approval/models"
+	"go.uber.org/zap"
 )
 
 // PolicyDecision is the outcome of policy evaluation for a command
@@ -50,4 +51,5 @@ type ToolConfig struct {
 	Exec            ExecConfig
 	Approval        approvalmodels.ApprovalService
 	PermissionsFile string // Path to allowed_permissions.md for persistent approvals
+	Logger          *zap.SugaredLogger
 }
