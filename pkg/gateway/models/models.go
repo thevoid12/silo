@@ -122,3 +122,11 @@ type DonePayload struct {
 type ErrorPayload struct {
 	Message string `json:"message"`
 }
+
+// SessionResponse is the JSON shape for GET /silo/vault/sessions
+type SessionResponse struct {
+	ID        string `json:"id"`
+	AppName   string `json:"app_name"`
+	UserID    string `json:"user_id"`
+	UpdatedAt string `json:"updated_at"`
+}
