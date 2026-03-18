@@ -1,7 +1,24 @@
 # Desktop App Specification (V0)
 
-Silo's desktop app provides a native GUI for interacting with the agent. It is an Electron shell that communicates with the Go binary as a sidecar process. The architecture is deliberately loosely coupled — the Go core exposes the same local HTTP + SSE protocol it uses for headless mode, and the Electron app is just another client. This design means the Electron shell can be swapped for Wails, Tauri, or any other framework without touching the Go core.
+UI/UX Requirements (Slick as a Core Goal)
+Design Targets
 
+    premium, calm, high-contrast
+    subtle motion, springy transitions
+    zero "developer vibes" in default mode
+
+Performance Targets
+
+    60fps animations
+    <100ms input-to-feedback
+    no blocking spinners (always show progress state)
+
+- understand 16_design_language.md for ui design
+Silo's desktop app provides a native GUI for interacting with the agent. It lives in `desktop/` inside the same repo as the Go code, but is a completely separate build artifact — `go build` ignores it, and `npm run build` inside `desktop/` produces the Electron installer independently.
+
+The Electron app bundles the pre-compiled `silo` binary as a sidecar (placed in `desktop/resources/sidecar/` by the Makefile at package time). On launch, Electron spawns it; on quit, Electron sends SIGTERM. All communication is standard HTTP + SSE over localhost. The Go codebase has no knowledge of Electron.
+
+- end goal of destop app is to look and feel like a claude coworker app. use lightblue+white ui theme,use the same font we use for claude code
 ---
 
 ## 1. Architecture Overview
@@ -46,6 +63,7 @@ Silo's desktop app provides a native GUI for interacting with the agent. It is a
 2. **Same protocol.** The Go binary does not know it is being driven by Electron. It serves the exact same HTTP + SSE API as when running standalone. The desktop app is architecturally identical to a Telegram adapter or CLI client.
 3. **Swappable shell.** Because the coupling is only through HTTP + SSE, migrating from Electron to Wails or Tauri requires only rewriting the frontend layer. The Go binary, all APIs, and all business logic remain untouched.
 4. **Offline-first.** The desktop app works without internet for local tools and cached sessions. LLM calls require network connectivity to providers.
+5. **Separate build, same repo.** `desktop/` lives alongside the Go code but is a completely independent build. `go build` produces the `silo` binary; `make desktop` compiles the binary, copies it into `desktop/resources/sidecar/`, and runs `electron-builder` to produce the installer.
 
 ---
 
@@ -353,12 +371,14 @@ On Linux: `resources/sidecar/silo`
 ### Build Pipeline
 
 ```bash
-# 1. Build Go binary for target platform
-CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w" -o desktop/resources/sidecar/silo ./cmd/silo/
+# 1. Build Go binary for target platform (repo root)
+CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w" -o desktop/resources/sidecar/silo .
 
-# 2. Build Electron app (bundles the Go binary)
+# 2. Build Electron app
 cd desktop && npx electron-builder --mac --arm64
 ```
+
+Both steps are wrapped in `make desktop` so CI just runs one command.
 
 The CI pipeline builds all platform combinations in parallel.
 
@@ -506,20 +526,21 @@ If the Go process crashes unexpectedly:
 ### Running Locally
 
 ```bash
-# Terminal 1: Start Go backend in development mode
-go run ./cmd/silo/ start --port 5110 --desktop-mode --no-daemon
+# Terminal 1: Start Go backend
+go run . start --serve --port 5110
 
 # Terminal 2: Start Electron with hot-reload
 cd desktop
-npm run dev    # vite dev server + electron
+SILO_DEV_PORT=5110 npm run dev    # vite dev server + electron
 ```
 
-The `npm run dev` script sets `SILO_PORT=5110` so the Electron app connects to the already-running Go process instead of spawning its own.
+The `npm run dev` script checks `SILO_DEV_PORT` — if set, Electron skips spawning its own silo process and connects directly to the already-running one.
 
-### Directory Structure (desktop/)
+### Directory Structure
 
 ```
-desktop/
+silo/
+└── desktop/                # Electron app — separate build, ignored by go build
 ├── package.json
 ├── tsconfig.json
 ├── electron-builder.yml
@@ -527,10 +548,10 @@ desktop/
 ├── src/
 │   ├── main/
 │   │   ├── index.ts          # Electron main entry
-│   │   ├── sidecar.ts        # Go process management
+│   │   ├── sidecar.ts        # Spawn + manage silo binary
 │   │   └── window.ts         # Window creation + management
 │   ├── preload/
-│   │   └── index.ts          # contextBridge API
+│   │   └── index.ts          # contextBridge API (port + token only)
 │   ├── renderer/
 │   │   ├── App.tsx            # Root React component
 │   │   ├── index.html
@@ -551,15 +572,18 @@ desktop/
 │   │   │   └── appStore.ts    # Global app state
 │   │   └── lib/
 │   │       ├── api.ts         # HTTP client for Go backend
-│   │       └── types.ts       # TypeScript types matching Go types
+│   │       └── types.ts       # TypeScript types matching Go API
 │   └── shared/
 │       └── constants.ts       # Shared between main + renderer
 └── resources/
-    ├── sidecar/               # Go binary placed here at build time
+    ├── sidecar/               # Pre-built silo binary placed here by `make desktop`
+    │   └── silo               # (silo.exe on Windows)
     ├── icon.icns
     ├── icon.ico
     └── icons/                 # Linux icon sizes
 ```
+
+> The `silo` repo has no `desktop/` directory and no Node.js dependencies.
 
 ---
 

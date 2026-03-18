@@ -1,0 +1,33 @@
+appId: com.siloframework.silo
+productName: Silo
+directories:
+  output: dist
+  buildResources: resources
+
+mac:
+  target:
+    - target: dmg
+      arch: [x64, arm64]
+  category: public.app-category.developer-tools
+  hardenedRuntime: true
+  icon: resources/icon.icns
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: resources/icon.ico
+
+linux:
+  target:
+    - target: AppImage
+      arch: [x64, arm64]
+    - target: deb
+      arch: [x64, arm64]
+  category: Development
+
+extraResources:
+  - from: resources/sidecar/
+    to: sidecar/
+    filter:
+      - "**/*"

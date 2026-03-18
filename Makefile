@@ -1,4 +1,4 @@
-.PHONY: build clean test
+.PHONY: build clean test desktop desktop-dev
 
 BINARY_NAME=silo
 COMMIT=$(shell git rev-parse --short HEAD 2>/dev/null || echo "none")
@@ -10,6 +10,17 @@ build:
 
 clean:
 	rm -f $(BINARY_NAME)
+	rm -rf desktop/out desktop/dist
 
 test:
 	go test ./...
+
+# desktop: build Go binary then package the Electron app
+desktop: build
+	cp $(BINARY_NAME) desktop/resources/sidecar/$(BINARY_NAME)
+	cd desktop && npm run package
+
+# desktop-dev: run Electron in dev mode against an already-running silo server
+# Usage: SILO_DEV_PORT=5110 SILO_DEV_TOKEN=<token> make desktop-dev
+desktop-dev:
+	cd desktop && npm run dev

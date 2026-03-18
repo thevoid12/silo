@@ -7,13 +7,15 @@
 ---
 
 ## Workspace Layout
-inside package we have each package 
-and inside each package we will have a model folder for all the interfaces and structs
-all request model from the ui needs to be end with Request, reponse should we end with Response validated and sanitized (use google's validator)
+
+Inside each package we will have a model folder for all the interfaces and structs.
+All request models from the UI must end with Request, responses should end with Response — validated and sanitized.
+
+Single repo, two separate build artifacts. `go build` ignores `desktop/` entirely — the Go binary size is unaffected by Electron code sitting next to it.
+
 ```
 silo/
-├── cmd/silo/                   # Go binary entry point (cobra root)
-│   └── main.go
+├── main.go                     # Go binary entry point
 ├── pkg/
 │   ├── core/                   # Core agent setup (ADK wiring, shared state)
 │   ├── vault/                  # XChaCha20-Poly1305 + Argon2id encrypted vault
@@ -21,19 +23,25 @@ silo/
 │   ├── approval/               # Tool approval (Go channels, sync.Map)
 │   ├── config/                 # TOML config parsing (viper)
 │   ├── gateway/                # HTTP server (gin, SSE, auth middleware)
-│   ├── logging/                # zap setup, formatters
-│   └── ipc/                    # IPC bridge for desktop mode
-├── desktop/                    # Electron app
-│   ├── main.js                 # Electron main process
-│   ├── src/                    # React/Svelte frontend
+│   ├── db/                     # SQLite open + schema migration
+│   └── logger/                 # zap setup, formatters
+├── desktop/                    # Electron app (separate build, not part of Go binary)
+│   ├── src/
+│   │   ├── main/               # Electron main process
+│   │   ├── preload/            # contextBridge API
+│   │   └── renderer/           # React UI
+│   ├── resources/
+│   │   └── sidecar/            # Pre-built silo binary placed here at package time
 │   ├── package.json
+│   ├── vite.config.ts
 │   └── electron-builder.yml
 ├── go.mod
 ├── go.sum
-├── silo.toml.example
-├── Makefile
-└── goreleaser.yml
+├── config/silo.toml            # Embedded default config
+└── Makefile                    # make build (Go only), make desktop (Electron installer)
 ```
+
+Two build commands, two outputs — the Go binary knows nothing about Electron, the Electron app bundles the Go binary as a sidecar.
 
 ---
 
@@ -309,97 +317,82 @@ curl -H "Authorization: Bearer <token>" \
 
 ## Phase D: Desktop App (Primary UI)
 
-### Step 13 — Electron scaffold + IPC bridge
+> All work in this phase is inside `desktop/`. The Go binary is compiled first (`make build`) then placed into `desktop/resources/sidecar/` by the Makefile before packaging.
+> No Go code changes are required for Phase D unless a gap in the gateway API is discovered.
 
-- `desktop/` — Electron app with React or Svelte frontend
-- `desktop/main.js` — Electron main process:
-  - Spawns `silo start` as a child process on app launch
-  - Sends SIGTERM on app quit
-  - IPC bridge: renderer communicates with Go backend via HTTP (localhost)
-- `pkg/ipc/` — any Go-side helpers for desktop-specific needs
-- Dev mode: `npm run dev` proxies to Go backend
+### Step 13 — silo-desktop repo scaffold + sidecar management
 
-**Files:**
-- `desktop/main.js`
-- `desktop/package.json`
-- `desktop/electron-builder.yml`
-- `pkg/ipc/ipc.go`
+- Init `desktop/` with Electron + Vite + React + TypeScript
+- `src/main/sidecar.ts` — spawns the bundled `silo` binary:
+  - Picks a random available port via `get-port`
+  - Spawns: `silo start --port {port} --serve` (direct serve, no fork)
+  - Reads bearer token from vault file (`~/.silo/vault`) after unlock prompt, or via a startup handshake
+  - On app quit: sends SIGTERM, waits up to 5s, then SIGKILL
+- `src/preload/index.ts` — exposes `port` and `token` to renderer via `contextBridge` only; never stored in DOM or localStorage
+- `resources/sidecar/` — directory where the pre-built `silo` binary is placed at build time
+
+**Key files:** `desktop/src/main/sidecar.ts`, `desktop/src/preload/index.ts`, `desktop/package.json`, `desktop/vite.config.ts`
 
 ### Step 14 — Chat view
 
-- Streaming chat UI: messages render as tokens arrive via SSE
-- Markdown rendering for agent responses (code blocks, lists, etc.)
+- Streaming chat UI: messages render token-by-token as SSE events arrive
+- Markdown rendering for agent responses (code blocks, lists, tables)
 - User input at the bottom, auto-scroll, message history
-- Session selector in sidebar
-- Visual indicators for tool calls (spinner, command preview)
+- Session selector in sidebar (populated from `GET /silo/vault/sessions`)
+- Tool call blocks: show tool name + command, expand/collapse output
 
-**Files:**
-- `desktop/src/views/Chat.{jsx,svelte}`
-- `desktop/src/components/Message.{jsx,svelte}`
-- `desktop/src/lib/sse.{js,ts}`
+**Key files:** `src/renderer/components/ChatView.tsx`, `MessageBubble.tsx`, `ToolCallBlock.tsx`, `hooks/useSSE.ts`
 
 ### Step 15 — Tool approval modal
 
-- When `event: approval_required` arrives, show a modal:
-  - Tool name, command to be executed
-  - Approve / Deny buttons
-  - "Always allow this command" checkbox (adds to allowlist)
-- Posts to `/silo/brain/tool-approval`
+- Triggered by `event: tool_pending` in the SSE stream
+- Shows tool name, full command with syntax highlighting
+- Countdown timer to auto-deny (respects `tools.approval.timeout` from config)
+- Keyboard: Enter = Approve, Escape = Deny
+- POSTs decision to `POST /silo/brain/tool-approval`
 
-**Files:**
-- `desktop/src/components/ApprovalModal.{jsx,svelte}`
+**Key files:** `src/renderer/components/ApprovalModal.tsx`
 
 ### Step 16 — Settings view
 
-- Provider configuration: select provider, enter/update API key
-- Vault management: change password, list keys
-- Shell policy: edit allowlist/blocklist
-- Config file editor (silo.toml)
-- All changes go through the Go backend API
+- Provider selection and API key management (via Go vault API)
+- Agent settings: max iterations, system prompt selection
+- Shell policy: view/edit allowlist and blocklist
+- All changes POST to Go config/vault endpoints — no direct file editing from Electron
 
-**Files:**
-- `desktop/src/views/Settings.{jsx,svelte}`
+**Key files:** `src/renderer/components/SettingsView.tsx`, `src/renderer/lib/api.ts`
 
 ### Step 17 — Packaging
 
-- `electron-builder.yml` config for:
-  - macOS: `.dmg`
-  - Windows: `.msi` (via NSIS or wix)
-  - Linux: `.AppImage`
-- Go binary bundled inside the Electron app (platform-specific)
-- `Makefile` targets: `make desktop-mac`, `make desktop-win`, `make desktop-linux`
+- `electron-builder.yml` bundles the platform-specific `silo` binary from `resources/sidecar/`
+- Targets: macOS `.dmg` (x64 + arm64), Windows `.exe` (NSIS), Linux `.AppImage` + `.deb`
+- Build pipeline:
+  1. Cross-compile `silo` for each target platform from this repo
+  2. Copy binary into `silo-desktop/resources/sidecar/`
+  3. Run `electron-builder` to produce the installer
 
-**Files:**
-- `desktop/electron-builder.yml`
-- `Makefile` (updated)
+**Key files:** `electron-builder.yml`, CI workflow in silo-desktop
 
 ---
 
 ### Verification: After Phase D
 
-Run these checks to confirm the desktop app works:
-
 ```bash
 # 1. Dev mode
-cd desktop && npm run dev
-# -> Electron window opens, Go backend starts automatically
+go run . start --serve --port 5110   # terminal 1: run Go backend
 
-# 2. Chat
-# Type a message in the chat input, verify streaming response appears
-# Trigger a tool call, verify the approval modal appears
-# Approve, verify the tool runs and result appears in chat
+cd desktop
+SILO_DEV_PORT=5110 npm run dev       # terminal 2: Electron connects to running backend
+# -> Electron window opens, chat works
 
-# 3. Settings
-# Open settings, change a config value, verify silo.toml is updated
-# Add a new vault secret, verify it persists
-
-# 4. Package
-make desktop-mac
-# -> produces .dmg in desktop/dist/
-# Open the .dmg, drag to Applications, launch, verify it works standalone
+# 2. Package
+make build                           # compiles silo binary
+make desktop                         # copies binary into desktop/resources/sidecar/, runs electron-builder
+# -> desktop/dist/*.dmg (macOS) / desktop/dist/*.exe (Windows)
+# -> open installer, launch app, verify it spawns its own silo sidecar and chat works
 ```
 
-**MILESTONE: Desktop app ships.**
+**MILESTONE: Desktop app ships as a standalone installer with bundled Go binary.**
 
 ---
 

@@ -156,18 +156,23 @@ func runServe() error {
 	defer log.Sync()
 
 	token := os.Getenv("SILO_GATEWAY_TOKEN")
-	if token == "" {
-		return siloerrors.ErrGatewayTokenMissing
-	}
-
 	apiKey := os.Getenv("SILO_API_KEY")
-	if apiKey == "" {
-		return siloerrors.ErrAPIKeyMissing
-	}
-
 	provider := os.Getenv("SILO_PROVIDER")
 	if provider == "" {
 		provider = viper.GetString("providers.default")
+	}
+
+	if desktopMode && (token == "" || apiKey == "") {
+		if err := loadDesktopCredentials(&token, &apiKey, &provider); err != nil {
+			return err
+		}
+	}
+
+	if token == "" {
+		return siloerrors.ErrGatewayTokenMissing
+	}
+	if apiKey == "" {
+		return siloerrors.ErrAPIKeyMissing
 	}
 	if provider == "" {
 		return siloerrors.ErrProviderMissing
@@ -175,6 +180,12 @@ func runServe() error {
 
 	host := viper.GetString("gateway.host")
 	port := viper.GetInt("gateway.port")
+	if startPort != 0 {
+		port = startPort
+	}
+	if desktopMode {
+		host = "127.0.0.1"
+	}
 	if host == "" || port == 0 {
 		return fmt.Errorf("gateway.host and gateway.port must be set in config")
 	}
@@ -264,6 +275,10 @@ func runServe() error {
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGTERM, syscall.SIGINT)
 
+	if desktopMode {
+		fmt.Printf("token:%s\n", token)
+	}
+
 	errCh := make(chan error, 1)
 	go func() { errCh <- srv.Run() }()
 
@@ -275,6 +290,44 @@ func runServe() error {
 	case err := <-errCh:
 		return err
 	}
+}
+
+// loadDesktopCredentials reads gateway credentials from the vault using SILO_VAULT_PASSWORD.
+func loadDesktopCredentials(token, apiKey, provider *string) error {
+	password := os.Getenv("SILO_VAULT_PASSWORD")
+	if password == "" {
+		return fmt.Errorf("SILO_VAULT_PASSWORD must be set in desktop mode")
+	}
+	vaultPath := viper.GetString("vault.path")
+	v := vault.New(vaultPath)
+	if err := v.Open(password); err != nil {
+		return fmt.Errorf("unlock vault: %w", err)
+	}
+	defer v.Close()
+
+	if *token == "" {
+		b, err := v.ReadSecret("gateway-token")
+		if err != nil {
+			return siloerrors.ErrGatewayTokenMissing
+		}
+		*token = string(b)
+	}
+	if *provider == "" {
+		if b, err := v.ReadSecret("provider"); err == nil {
+			*provider = string(b)
+		}
+	}
+	if *provider == "" {
+		*provider = viper.GetString("providers.default")
+	}
+	if *apiKey == "" && *provider != "" {
+		b, err := v.ReadSecret(fmt.Sprintf("%s_api_key", *provider))
+		if err != nil {
+			return siloerrors.ErrAPIKeyMissing
+		}
+		*apiKey = string(b)
+	}
+	return nil
 }
 
 func init() {
