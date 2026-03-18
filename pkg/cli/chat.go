@@ -85,7 +85,7 @@ func runChat(cmd *cobra.Command, args []string) error {
 		model = chatModel
 	}
 
-	apiKeyBytes, err := v.ReadSecret(fmt.Sprintf("%s_api_key", provider))
+	apiKeyBytes, err := v.ReadSecret("llm_api_key")
 	if err != nil {
 		return fmt.Errorf("API key not found — run 'silo init' to configure: %w", err)
 	}

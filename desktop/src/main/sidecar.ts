@@ -19,11 +19,12 @@ function getFreePort(): Promise<number> {
   })
 }
 
-// getBinaryPath resolves the silo binary for packaged or dev mode
+// getBinaryPath resolves the silo binary for packaged, Playwright test, or dev mode
 function getBinaryPath(): string {
   const ext = process.platform === 'win32' ? '.exe' : ''
-  if (app.isPackaged) return join(process.resourcesPath, 'sidecar', `silo${ext}`)
   if (process.env.SILO_BIN) return process.env.SILO_BIN
+  const sidecar = join(process.resourcesPath, 'sidecar', `silo${ext}`)
+  if (app.isPackaged || existsSync(sidecar)) return sidecar
   // dev: binary is built in the repo root, one level above desktop/
   return join(app.getAppPath(), '..', `silo${ext}`)
 }
@@ -75,6 +76,23 @@ async function ptyRun(
   })
 }
 
+// spawnVault runs a vault command with password (and optional set-value) via env vars
+function spawnVault(bin: string, args: string[], password: string, setValue?: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const env: Record<string, string> = { ...(process.env as Record<string, string>), SILO_VAULT_PASSWORD: password }
+    if (setValue !== undefined) env.SILO_VAULT_SET_VALUE = setValue
+    const proc = spawn(bin, args, { env, stdio: ['ignore', 'pipe', 'pipe'] })
+    let out = ''
+    let err = ''
+    proc.stdout?.on('data', (d: Buffer) => { out += d.toString() })
+    proc.stderr?.on('data', (d: Buffer) => { err += d.toString() })
+    proc.on('exit', code => {
+      code === 0 ? resolve(out.trim()) : reject(new Error(err.trim() || `vault command exited with code ${code}`))
+    })
+    proc.on('error', reject)
+  })
+}
+
 export class Sidecar {
   private proc: ChildProcess | null = null
 
@@ -94,6 +112,7 @@ export class Sidecar {
         () => reject(new Error('silo startup timed out')),
         15000
       )
+      let stderr = ''
 
       this.proc!.stdout?.on('data', (chunk: Buffer) => {
         const line = chunk.toString().trim()
@@ -104,10 +123,12 @@ export class Sidecar {
         }
       })
 
+      this.proc!.stderr?.on('data', (chunk: Buffer) => { stderr += chunk.toString() })
+
       this.proc!.on('error', err => { clearTimeout(timeout); reject(err) })
       this.proc!.on('exit', code => {
         clearTimeout(timeout)
-        if (!token) reject(new Error(`silo exited with code ${code}`))
+        if (!token) reject(new Error(stderr.trim() || `silo exited with code ${code}`))
       })
     })
 
@@ -120,30 +141,53 @@ export class Sidecar {
     return existsSync(join(homedir(), '.silo', 'vault.enc'))
   }
 
-  // initVault creates the vault and stores provider, api key, and gateway token via PTY-driven CLI
+  // initVault creates the vault and stores provider, api key, and gateway token
   async initVault({ password, provider, apiKey }: SetupParams): Promise<void> {
     const bin = getBinaryPath()
     const token = randomBytes(32).toString('hex')
+    const env = { ...(process.env as Record<string, string>), SILO_VAULT_INIT_PASSWORD: password }
 
-    await ptyRun(bin, ['vault', 'init'], [
-      { trigger: 'Enter vault password: ', response: password },
-      { trigger: 'Confirm password: ', response: password },
-    ])
+    await new Promise<void>((resolve, reject) => {
+      const proc = spawn(bin, ['vault', 'init'], { env, stdio: ['ignore', 'pipe', 'pipe'] })
+      let err = ''
+      proc.stderr?.on('data', (d: Buffer) => { err += d.toString() })
+      proc.on('exit', code => code === 0 ? resolve() : reject(new Error(err.trim() || `vault init exited with code ${code}`)))
+      proc.on('error', reject)
+    })
 
-    await ptyRun(bin, ['vault', 'set', 'provider'], [
-      { trigger: 'Enter vault password: ', response: password },
-      { trigger: 'Enter value for provider: ', response: provider },
-    ])
+    await spawnVault(bin, ['vault', 'set', 'provider'], password, provider)
+    await spawnVault(bin, ['vault', 'set', 'llm_api_key'], password, apiKey)
+    await spawnVault(bin, ['vault', 'set', 'gateway-token'], password, token)
+  }
 
-    await ptyRun(bin, ['vault', 'set', `${provider}_api_key`], [
-      { trigger: 'Enter vault password: ', response: password },
-      { trigger: `Enter value for ${provider}_api_key: `, response: apiKey },
-    ])
+  // vaultList returns all secret keys stored in the vault
+  async vaultList(password: string): Promise<string[]> {
+    const bin = getBinaryPath()
+    const output = await spawnVault(bin, ['vault', 'list'], password)
+    if (!output || output.includes('No secrets stored')) return []
+    return output.split('\n').map(l => l.trim()).filter(l => l.length > 0)
+  }
 
-    await ptyRun(bin, ['vault', 'set', 'gateway-token'], [
-      { trigger: 'Enter vault password: ', response: password },
-      { trigger: 'Enter value for gateway-token: ', response: token },
-    ])
+  // vaultGetAll fetches values for every key in a single batch
+  async vaultGetAll(password: string, keys: string[]): Promise<Record<string, string>> {
+    const bin = getBinaryPath()
+    const results: Record<string, string> = {}
+    await Promise.all(keys.map(async key => {
+      results[key] = await spawnVault(bin, ['vault', 'get', key], password)
+    }))
+    return results
+  }
+
+  // vaultSet stores or updates a secret
+  async vaultSet(password: string, key: string, value: string): Promise<void> {
+    const bin = getBinaryPath()
+    await spawnVault(bin, ['vault', 'set', key], password, value)
+  }
+
+  // vaultDelete removes a secret from the vault
+  async vaultDelete(password: string, key: string): Promise<void> {
+    const bin = getBinaryPath()
+    await spawnVault(bin, ['vault', 'delete', key], password)
   }
 
   // connectDev connects to an already-running server via env vars (dev only)

@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"os"
 	"syscall"
 
 	"silo/pkg/config"
@@ -33,23 +34,27 @@ var vaultInitCmd = &cobra.Command{
 			return fmt.Errorf("vault already exists at %s", vaultPath)
 		}
 
-		fmt.Print("Enter vault password: ")
-		pass1, err := readPassword()
-		if err != nil {
-			return err
+		var pass string
+		if env := os.Getenv("SILO_VAULT_INIT_PASSWORD"); env != "" {
+			pass = env
+		} else {
+			fmt.Print("Enter vault password: ")
+			p1, err := readPassword()
+			if err != nil {
+				return err
+			}
+			fmt.Print("Confirm password: ")
+			p2, err := readPassword()
+			if err != nil {
+				return err
+			}
+			if p1 != p2 {
+				return fmt.Errorf("passwords do not match")
+			}
+			pass = p1
 		}
 
-		fmt.Print("Confirm password: ")
-		pass2, err := readPassword()
-		if err != nil {
-			return err
-		}
-
-		if pass1 != pass2 {
-			return fmt.Errorf("passwords do not match")
-		}
-
-		if len(pass1) < 8 {
+		if len(pass) < 8 {
 			return fmt.Errorf("password must be at least 8 characters")
 		}
 
@@ -57,7 +62,7 @@ var vaultInitCmd = &cobra.Command{
 			return err
 		}
 
-		if err := v.Create(pass1); err != nil {
+		if err := v.Create(pass); err != nil {
 			return err
 		}
 
@@ -78,11 +83,15 @@ var vaultSetCmd = &cobra.Command{
 		defer v.Close()
 
 		key := args[0]
-
-		fmt.Printf("Enter value for %s: ", key)
-		value, err := readPassword()
-		if err != nil {
-			return err
+		var value string
+		if env := os.Getenv("SILO_VAULT_SET_VALUE"); env != "" {
+			value = env
+		} else {
+			fmt.Printf("Enter value for %s: ", key)
+			value, err = readPassword()
+			if err != nil {
+				return err
+			}
 		}
 
 		if err := v.WriteSecret(key, []byte(value)); err != nil {
@@ -179,7 +188,7 @@ func readPassword() (string, error) {
 	return string(pass), nil
 }
 
-// openVault prompts for a password and returns an unlocked vault
+// openVault returns an unlocked vault, using SILO_VAULT_PASSWORD env var if set
 func openVault() (models.SecretVault, error) {
 	vaultPath := viper.GetString("vault.path")
 	v := vault.New(vaultPath)
@@ -188,10 +197,14 @@ func openVault() (models.SecretVault, error) {
 		return nil, fmt.Errorf("vault not found. Run 'silo vault init' first")
 	}
 
-	fmt.Print("Enter vault password: ")
-	pass, err := readPassword()
-	if err != nil {
-		return nil, err
+	pass := os.Getenv("SILO_VAULT_PASSWORD")
+	if pass == "" {
+		fmt.Print("Enter vault password: ")
+		var err error
+		pass, err = readPassword()
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	if err := v.Open(pass); err != nil {

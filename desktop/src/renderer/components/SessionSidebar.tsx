@@ -60,9 +60,9 @@ const s: Record<string, React.CSSProperties> = {
     width: 22,
     height: 22,
     borderRadius: '9999px',
-    border: '1px solid var(--border)',
+    border: '1px solid rgba(74, 124, 247, 0.3)',
     background: 'transparent',
-    color: 'var(--muted)',
+    color: 'var(--accent)',
     fontSize: '1rem',
     lineHeight: 1,
     cursor: 'pointer',
@@ -74,6 +74,7 @@ const s: Record<string, React.CSSProperties> = {
   },
   list: {
     flex: 1,
+    minHeight: 0,
     overflowY: 'auto',
     padding: '0 0.5rem 1rem',
     display: 'flex',
@@ -95,7 +96,7 @@ const s: Record<string, React.CSSProperties> = {
     transition: 'background var(--transition)',
   },
   rowActive: {
-    background: 'rgba(1,22,39,0.07)',
+    background: 'rgba(74, 124, 247, 0.1)',
   },
   rowId: {
     fontFamily: 'var(--font-mono)',

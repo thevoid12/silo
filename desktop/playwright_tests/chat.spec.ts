@@ -80,8 +80,8 @@ test.describe('chat', () => {
     await expect(page.locator('text=say exactly: hello')).toBeVisible()
     await expect(textarea).toHaveValue('')
 
-    // send button re-enables once streaming finishes
-    await expect(page.locator('button[type="submit"]')).toBeEnabled({ timeout: 60_000 })
+    // textarea re-enables once streaming finishes (button stays disabled until text is typed)
+    await expect(textarea).toBeEnabled({ timeout: 60_000 })
 
     await app.close()
   })

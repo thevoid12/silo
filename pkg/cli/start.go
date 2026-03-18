@@ -99,7 +99,7 @@ func spawnServer() error {
 		return siloerrors.ErrProviderMissing
 	}
 
-	apiKeyBytes, err := v.ReadSecret(fmt.Sprintf("%s_api_key", provider))
+	apiKeyBytes, err := v.ReadSecret("llm_api_key")
 	if err != nil {
 		return siloerrors.ErrAPIKeyMissing
 	}
@@ -321,7 +321,7 @@ func loadDesktopCredentials(token, apiKey, provider *string) error {
 		*provider = viper.GetString("providers.default")
 	}
 	if *apiKey == "" && *provider != "" {
-		b, err := v.ReadSecret(fmt.Sprintf("%s_api_key", *provider))
+		b, err := v.ReadSecret("llm_api_key")
 		if err != nil {
 			return siloerrors.ErrAPIKeyMissing
 		}

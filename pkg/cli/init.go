@@ -116,7 +116,7 @@ func runInteractive(v models.SecretVault) error {
 		return fmt.Errorf("API key cannot be empty")
 	}
 
-	keyName := fmt.Sprintf("%s_api_key", provider)
+	keyName := "llm_api_key"
 	if err := v.WriteSecret(keyName, []byte(apiKey)); err != nil {
 		return err
 	}
@@ -167,7 +167,7 @@ func runNonInteractive(v models.SecretVault) error {
 		return err
 	}
 
-	keyName := fmt.Sprintf("%s_api_key", provider)
+	keyName := "llm_api_key"
 	if err := v.WriteSecret(keyName, []byte(apiKey)); err != nil {
 		return err
 	}

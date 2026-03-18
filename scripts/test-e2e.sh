@@ -3,6 +3,7 @@ set -euo pipefail
 
 VAULT_PASSWORD="thisisvoid"
 PORT=5110
+SILO_BIN=$(realpath ./silo)
 SERVER_LOG=$(mktemp)
 SERVER_PID=""
 
@@ -37,4 +38,4 @@ fi
 
 echo "==> server ready, running playwright tests"
 cd desktop
-SILO_DEV_PORT="$PORT" SILO_DEV_TOKEN="$TOKEN" bunx playwright test "$@"
+SILO_DEV_PORT="$PORT" SILO_DEV_TOKEN="$TOKEN" VAULT_PASSWORD="$VAULT_PASSWORD" SILO_BIN="$SILO_BIN" bunx playwright test "$@"

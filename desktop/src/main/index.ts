@@ -23,6 +23,42 @@ function setupIpc(): void {
     }
   })
 
+  ipcMain.handle(IPC.VAULT_LIST, async (_, password: string) => {
+    try {
+      const keys = await sidecar.vaultList(password)
+      return { ok: true, keys }
+    } catch (err) {
+      return { ok: false, message: err instanceof Error ? err.message : String(err) }
+    }
+  })
+
+  ipcMain.handle(IPC.VAULT_GET_ALL, async (_, password: string, keys: string[]) => {
+    try {
+      const entries = await sidecar.vaultGetAll(password, keys)
+      return { ok: true, entries }
+    } catch (err) {
+      return { ok: false, message: err instanceof Error ? err.message : String(err) }
+    }
+  })
+
+  ipcMain.handle(IPC.VAULT_SET, async (_, password: string, key: string, value: string) => {
+    try {
+      await sidecar.vaultSet(password, key, value)
+      return { ok: true }
+    } catch (err) {
+      return { ok: false, message: err instanceof Error ? err.message : String(err) }
+    }
+  })
+
+  ipcMain.handle(IPC.VAULT_DELETE, async (_, password: string, key: string) => {
+    try {
+      await sidecar.vaultDelete(password, key)
+      return { ok: true }
+    } catch (err) {
+      return { ok: false, message: err instanceof Error ? err.message : String(err) }
+    }
+  })
+
   ipcMain.handle(IPC.UNLOCK, async (_, password: string) => {
     try {
       connection = process.env.SILO_DEV_PORT

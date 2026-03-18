@@ -25,6 +25,28 @@ export interface SetupResult {
   message?: string
 }
 
+export interface VaultListResult {
+  ok: boolean
+  keys?: string[]
+  message?: string
+}
+
+export interface VaultGetAllResult {
+  ok: boolean
+  entries?: Record<string, string>
+  message?: string
+}
+
+export interface VaultSetResult {
+  ok: boolean
+  message?: string
+}
+
+export interface VaultDeleteResult {
+  ok: boolean
+  message?: string
+}
+
 // SSE payloads — mirror Go's gateway/models/models.go
 export interface TokenPayload { text: string }
 export interface ToolCallPayload { tool: string; args: Record<string, unknown> }

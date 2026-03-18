@@ -134,7 +134,7 @@ const s: Record<string, React.CSSProperties> = {
     fontSize: '0.9375rem',
     fontWeight: 500,
     fontFamily: 'inherit',
-    background: 'var(--ink)',
+    background: 'var(--accent)',
     color: '#fff',
     border: 'none',
     borderRadius: '9999px',

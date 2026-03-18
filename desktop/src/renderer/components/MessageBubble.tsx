@@ -39,7 +39,7 @@ const s: Record<string, React.CSSProperties> = {
     marginBottom: '1rem',
   },
   userBubble: {
-    background: 'var(--ink)',
+    background: 'var(--accent)',
     color: '#fff',
     padding: '0.625rem 1rem',
     borderRadius: '1.25rem 1.25rem 0.25rem 1.25rem',

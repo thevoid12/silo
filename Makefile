@@ -1,4 +1,4 @@
-.PHONY: build clean test desktop desktop-test desktop-dev test-playwright
+.PHONY: build clean test desktop desktop-test desktop-dev test-playwright test-playwright-file
 
 BINARY_NAME=silo
 COMMIT=$(shell git rev-parse --short HEAD 2>/dev/null || echo "none")
@@ -23,6 +23,7 @@ desktop: build
 # desktop-test: build unpacked app for the current arch only (faster, used by test-playwright)
 desktop-test: build
 	cp $(BINARY_NAME) desktop/resources/sidecar/$(BINARY_NAME)
+	rm -rf desktop/dist
 	cd desktop && bun run package-test
 
 # desktop-dev: run Electron in dev mode against an already-running silo server
@@ -33,3 +34,8 @@ desktop-dev:
 # test-playwright: build unpacked app for current arch, start silo server, run tests, stop server
 test-playwright: desktop-test
 	bash scripts/test-e2e.sh
+
+# test-playwright-file: build then run a single playwright test file
+# Usage: make test-playwright-file FILE=playwright_tests/vault.spec.ts
+test-playwright-file: desktop-test
+	bash scripts/test-e2e.sh $(FILE)
