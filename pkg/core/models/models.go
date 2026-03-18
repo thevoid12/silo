@@ -41,7 +41,3 @@ type SiloRunner struct {
 	Sessions session.Service
 }
 
-// SessionConfig holds configuration for the SQLite-backed session service
-type SessionConfig struct {
-	DBPath string
-}

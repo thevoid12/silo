@@ -7,18 +7,16 @@ import (
 
 	"google.golang.org/adk/session"
 
-	coremodels "silo/pkg/core/models"
+	siloDb "silo/pkg/db"
 )
 
 func openTestDB(t *testing.T) session.Service {
 	t.Helper()
-	svc, err := NewSQLiteSessionService(coremodels.SessionConfig{
-		DBPath: filepath.Join(t.TempDir(), "test.db"),
-	})
+	database, err := siloDb.Open(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
-		t.Fatalf("NewSQLiteSessionService: %v", err)
+		t.Fatalf("db.Open: %v", err)
 	}
-	return svc
+	return NewSQLiteSessionService(database)
 }
 
 func TestSQLiteSessionService_CreateGet(t *testing.T) {
@@ -49,20 +47,22 @@ func TestSQLiteSessionService_Persistence(t *testing.T) {
 	dbPath := filepath.Join(dir, "persist.db")
 	ctx := context.Background()
 
-	svc1, err := NewSQLiteSessionService(coremodels.SessionConfig{DBPath: dbPath})
+	db1, err := siloDb.Open(dbPath)
 	if err != nil {
 		t.Fatalf("first open: %v", err)
 	}
+	svc1 := NewSQLiteSessionService(db1)
 	resp, err := svc1.Create(ctx, &session.CreateRequest{AppName: "silo", UserID: "u1"})
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
 	sid := resp.Session.ID()
 
-	svc2, err := NewSQLiteSessionService(coremodels.SessionConfig{DBPath: dbPath})
+	db2, err := siloDb.Open(dbPath)
 	if err != nil {
 		t.Fatalf("second open: %v", err)
 	}
+	svc2 := NewSQLiteSessionService(db2)
 	got, err := svc2.Get(ctx, &session.GetRequest{AppName: "silo", UserID: "u1", SessionID: sid})
 	if err != nil {
 		t.Fatalf("Get after reopen: %v", err)
@@ -138,9 +138,7 @@ func TestSQLiteSessionService_List(t *testing.T) {
 }
 
 func TestSQLiteSessionService_BadPath(t *testing.T) {
-	_, err := NewSQLiteSessionService(coremodels.SessionConfig{
-		DBPath: "/nonexistent/dir/test.db",
-	})
+	_, err := siloDb.Open("/nonexistent/dir/test.db")
 	if err == nil {
 		t.Fatal("expected error for non-existent path")
 	}

@@ -12,65 +12,14 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	_ "github.com/mattn/go-sqlite3"
 	"google.golang.org/adk/session"
 
 	"silo/pkg/db/dbal"
-	coremodels "silo/pkg/core/models"
-	siloerrors "silo/pkg/errors"
 )
 
-// NewSQLiteSessionService opens a SQLite-backed session service and runs schema migrations.
-func NewSQLiteSessionService(cfg coremodels.SessionConfig) (session.Service, error) {
-	db, err := sql.Open("sqlite3", cfg.DBPath)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %s", siloerrors.ErrDBOpen, err)
-	}
-	if err := migrateSchema(db); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("%w: %s", siloerrors.ErrDBMigrate, err)
-	}
-	db.SetMaxOpenConns(1) // SQLite is single-writer; serialise through one connection
-	return &sqliteService{db: db, q: dbal.New(db)}, nil
-}
-
-// migrateSchema creates all required tables if they do not exist.
-func migrateSchema(db *sql.DB) error {
-	const ddl = `
-CREATE TABLE IF NOT EXISTS sessions (
-    session_id TEXT     NOT NULL,
-    app_name   TEXT     NOT NULL,
-    user_id    TEXT     NOT NULL,
-    state      TEXT     NOT NULL DEFAULT '{}',
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (app_name, user_id, session_id)
-);
-CREATE TABLE IF NOT EXISTS session_events (
-    id         TEXT     NOT NULL,
-    session_id TEXT     NOT NULL,
-    app_name   TEXT     NOT NULL,
-    user_id    TEXT     NOT NULL,
-    event_json TEXT     NOT NULL,
-    timestamp  DATETIME NOT NULL,
-    PRIMARY KEY (id, app_name, user_id, session_id),
-    FOREIGN KEY (app_name, user_id, session_id)
-        REFERENCES sessions(app_name, user_id, session_id) ON DELETE CASCADE
-);
-CREATE TABLE IF NOT EXISTS app_states (
-    app_name   TEXT     NOT NULL PRIMARY KEY,
-    state      TEXT     NOT NULL DEFAULT '{}',
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-CREATE TABLE IF NOT EXISTS user_states (
-    app_name   TEXT     NOT NULL,
-    user_id    TEXT     NOT NULL,
-    state      TEXT     NOT NULL DEFAULT '{}',
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (app_name, user_id)
-);`
-	_, err := db.Exec(ddl)
-	return err
+// NewSQLiteSessionService wraps an open *sql.DB as a session.Service.
+func NewSQLiteSessionService(database *sql.DB) session.Service {
+	return &sqliteService{db: database, q: dbal.New(database)}
 }
 
 // sqliteService implements session.Service backed by SQLite.

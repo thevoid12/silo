@@ -19,6 +19,7 @@ import (
 	"silo/pkg/config"
 	"silo/pkg/core"
 	coremodels "silo/pkg/core/models"
+	siloDb "silo/pkg/db"
 	siloerrors "silo/pkg/errors"
 	"silo/pkg/gateway"
 	gatewaymodels "silo/pkg/gateway/models"
@@ -190,10 +191,11 @@ func runServe() error {
 	if dbPath == "" {
 		return fmt.Errorf("session.db_path must be set in config")
 	}
-	sharedSessions, err := core.NewSQLiteSessionService(coremodels.SessionConfig{DBPath: dbPath})
+	database, err := siloDb.Open(dbPath)
 	if err != nil {
 		return fmt.Errorf("init session store: %w", err)
 	}
+	sharedSessions := core.NewSQLiteSessionService(database)
 
 	sysPromptPath := viper.GetString("agent.system_prompt_path")
 	agentCoreCfg := coremodels.BuildConfig{
