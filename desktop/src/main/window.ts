@@ -4,7 +4,7 @@ import { join } from 'path'
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': ['*'],
   'Access-Control-Allow-Headers': ['Authorization', 'Content-Type'],
-  'Access-Control-Allow-Methods': ['GET', 'POST', 'OPTIONS'],
+  'Access-Control-Allow-Methods': ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
   'Access-Control-Max-Age': ['86400'],
 }
 

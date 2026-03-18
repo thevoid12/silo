@@ -62,12 +62,6 @@ func spawnServer() error {
 		return fmt.Errorf("%w (PID %d)", siloerrors.ErrServerAlreadyRunning, pid)
 	}
 
-	// Remove stale user config if present — all settings now come from the embedded config.
-	// Users who want to override settings should use --config.
-	if cfgFile == "" {
-		os.Remove(config.DefaultConfigPath())
-	}
-
 	vaultPath := viper.GetString("vault.path")
 	v := vault.New(vaultPath)
 	if !v.Exists() {

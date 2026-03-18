@@ -28,7 +28,7 @@ desktop-test: build
 
 # desktop-dev: run Electron in dev mode against an already-running silo server
 # Usage: SILO_DEV_PORT=5110 SILO_DEV_TOKEN=<token> make desktop-dev
-desktop-dev:
+desktop-dev: build
 	cd desktop && bun run dev
 
 # test-playwright: build unpacked app for current arch, start silo server, run tests, stop server

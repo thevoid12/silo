@@ -130,3 +130,23 @@ type SessionResponse struct {
 	UserID    string `json:"user_id"`
 	UpdatedAt string `json:"updated_at"`
 }
+
+// SettingsResponse is the JSON shape for GET /silo/settings
+type SettingsResponse struct {
+	Provider      string `json:"provider"`
+	GeminiModel   string `json:"gemini_model"`
+	OpenAIModel   string `json:"openai_model"`
+	MaxIterations int    `json:"max_iterations"`
+	ApprovalMode  string `json:"approval_mode"`
+	ShellTimeout  int    `json:"shell_timeout_secs"`
+}
+
+// SettingsUpdateRequest is the body for PATCH /silo/settings; all fields optional
+type SettingsUpdateRequest struct {
+	Provider      *string `json:"provider,omitempty"`
+	GeminiModel   *string `json:"gemini_model,omitempty"`
+	OpenAIModel   *string `json:"openai_model,omitempty"`
+	MaxIterations *int    `json:"max_iterations,omitempty"`
+	ApprovalMode  *string `json:"approval_mode,omitempty"`
+	ShellTimeout  *int    `json:"shell_timeout_secs,omitempty"`
+}

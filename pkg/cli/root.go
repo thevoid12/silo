@@ -63,35 +63,24 @@ func init() {
 
 func initConfig() {
 	config.SetDefaults()
-
 	viper.SetConfigType("toml")
 
-	// Layer 1: embedded project config — always current, sourced from the binary.
-	// Any change to config/silo.toml is picked up on next rebuild, no manual sync needed.
+	// Layer 1: embedded config as base — new keys added here are always picked up.
 	if len(projectConfigBytes) > 0 {
 		if err := viper.ReadConfig(bytes.NewReader(projectConfigBytes)); err != nil {
 			fmt.Fprintf(os.Stderr, "Error reading embedded config: %v\n", err)
 		}
 	}
 
-	// Layer 2: user overrides — only keys the user explicitly wants to change.
+	// Layer 2: user file overrides — persisted to ~/.silo/silo.toml on settings save.
+	userCfg := config.DefaultConfigPath()
 	if cfgFile != "" {
-		viper.SetConfigFile(cfgFile)
-		if err := viper.MergeInConfig(); err != nil {
-			fmt.Fprintf(os.Stderr, "Error reading config file: %v\n", err)
-		}
-	} else {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "Error:", err)
-			os.Exit(1)
-		}
-		viper.SetConfigName("silo")
-		viper.AddConfigPath(filepath.Join(home, ".silo"))
-		if err := viper.MergeInConfig(); err != nil {
-			if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
-				fmt.Fprintf(os.Stderr, "Error reading user config: %v\n", err)
-			}
+		userCfg = cfgFile
+	}
+	viper.SetConfigFile(userCfg)
+	if err := viper.MergeInConfig(); err != nil {
+		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
+			fmt.Fprintf(os.Stderr, "Error reading user config: %v\n", err)
 		}
 	}
 

@@ -5,3 +5,4 @@
 - [ ] need to make sure every error case is logged using our zap logger
 - [ ] hot config reloading, we cant keep building again and again
 - [ ] encrypt the password at rest in the vault
+- [ ] settings page is very rudimentary and has fixed types, it wont scale, we got to make it dynamic by directly reading the config and bunch of boxes to fill

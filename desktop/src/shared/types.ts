@@ -78,6 +78,16 @@ export interface Message {
   error?: string
 }
 
+// Settings — mirrors Go's SettingsResponse
+export interface Settings {
+  provider: string
+  gemini_model: string
+  openai_model: string
+  max_iterations: number
+  approval_mode: string
+  shell_timeout_secs: number
+}
+
 // Session — mirrors Go's SessionResponse
 export interface Session {
   id: string

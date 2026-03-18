@@ -45,6 +45,8 @@ func (s *server) registerRoutes() {
 	auth.POST("/brain/chat", s.handleChat)
 	auth.POST("/brain/tool-approval", s.handleToolApproval)
 	auth.GET("/vault/sessions", s.handleListSessions)
+	auth.GET("/settings", s.handleGetSettings)
+	auth.PATCH("/settings", s.handleUpdateSettings)
 }
 
 func (s *server) handleHealth(c *gin.Context) {

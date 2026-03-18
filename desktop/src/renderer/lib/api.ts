@@ -1,4 +1,4 @@
-import type { SiloConnection, Session } from '@shared/types'
+import type { SiloConnection, Session, Settings } from '@shared/types'
 
 // createApiClient returns typed HTTP methods bound to the given connection
 export function createApiClient(conn: SiloConnection) {
@@ -19,8 +19,20 @@ export function createApiClient(conn: SiloConnection) {
     })
   }
 
+  async function patch<T>(path: string, body: unknown): Promise<T> {
+    const res = await fetch(`${base}${path}`, {
+      method: 'PATCH',
+      headers: { Authorization: auth, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    if (!res.ok) throw new Error(`PATCH ${path} failed: ${res.status}`)
+    return res.json()
+  }
+
   return {
     listSessions: () => get<Session[]>('/silo/vault/sessions'),
+    getSettings: () => get<Settings>('/silo/settings'),
+    updateSettings: (changes: Partial<Settings>) => patch<Settings>('/silo/settings', changes),
 
     resolveApproval: async (requestId: string, approved: boolean): Promise<void> => {
       await post('/silo/brain/tool-approval', { request_id: requestId, approved })
