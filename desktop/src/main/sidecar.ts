@@ -1,8 +1,11 @@
 import { spawn, ChildProcess } from 'child_process'
 import { createServer, AddressInfo } from 'net'
+import { existsSync } from 'fs'
 import { join } from 'path'
+import { homedir } from 'os'
+import { randomBytes } from 'crypto'
 import { app } from 'electron'
-import type { SiloConnection } from '@shared/types'
+import type { SiloConnection, SetupParams } from '@shared/types'
 
 // getFreePort binds to port 0 and returns the OS-assigned port
 function getFreePort(): Promise<number> {
@@ -18,9 +21,11 @@ function getFreePort(): Promise<number> {
 
 // getBinaryPath resolves the silo binary for packaged or dev mode
 function getBinaryPath(): string {
-  if (!app.isPackaged) return process.env.SILO_BIN ?? 'silo'
   const ext = process.platform === 'win32' ? '.exe' : ''
-  return join(process.resourcesPath, 'sidecar', `silo${ext}`)
+  if (app.isPackaged) return join(process.resourcesPath, 'sidecar', `silo${ext}`)
+  if (process.env.SILO_BIN) return process.env.SILO_BIN
+  // dev: binary is built in the repo root, one level above desktop/
+  return join(app.getAppPath(), '..', `silo${ext}`)
 }
 
 // pollHealth retries GET /health until it succeeds or times out
@@ -36,6 +41,38 @@ async function pollHealth(port: number, token: string, timeoutMs = 10000): Promi
     await new Promise(r => setTimeout(r, 200))
   }
   throw new Error('silo server did not become ready in time')
+}
+
+// ptyRun spawns a command via PTY and drives it through a sequence of prompt/response pairs
+async function ptyRun(
+  bin: string,
+  args: string[],
+  dialogue: Array<{ trigger: string; response: string }>,
+): Promise<void> {
+  const pty = await import('node-pty')
+  return new Promise((resolve, reject) => {
+    const term = pty.spawn(bin, args, { name: 'xterm', cols: 80, rows: 24, env: process.env as Record<string, string> })
+    let buf = ''
+    let step = 0
+    let done = false
+
+    term.onData((data: string) => {
+      buf += data
+      if (step < dialogue.length && buf.includes(dialogue[step].trigger)) {
+        const r = dialogue[step].response
+        step++
+        buf = ''
+        term.write(r + '\r')
+      }
+    })
+
+    term.onExit(({ exitCode }: { exitCode: number }) => {
+      done = true
+      exitCode === 0 ? resolve() : reject(new Error(`silo vault command exited with code ${exitCode}`))
+    })
+
+    setTimeout(() => { if (!done) { term.kill(); reject(new Error('vault operation timed out')) } }, 20000)
+  })
 }
 
 export class Sidecar {
@@ -76,6 +113,37 @@ export class Sidecar {
 
     await pollHealth(port, token)
     return { port, token }
+  }
+
+  // checkVaultExists returns true if the vault file exists on disk
+  checkVaultExists(): boolean {
+    return existsSync(join(homedir(), '.silo', 'vault.enc'))
+  }
+
+  // initVault creates the vault and stores provider, api key, and gateway token via PTY-driven CLI
+  async initVault({ password, provider, apiKey }: SetupParams): Promise<void> {
+    const bin = getBinaryPath()
+    const token = randomBytes(32).toString('hex')
+
+    await ptyRun(bin, ['vault', 'init'], [
+      { trigger: 'Enter vault password: ', response: password },
+      { trigger: 'Confirm password: ', response: password },
+    ])
+
+    await ptyRun(bin, ['vault', 'set', 'provider'], [
+      { trigger: 'Enter vault password: ', response: password },
+      { trigger: 'Enter value for provider: ', response: provider },
+    ])
+
+    await ptyRun(bin, ['vault', 'set', `${provider}_api_key`], [
+      { trigger: 'Enter vault password: ', response: password },
+      { trigger: `Enter value for ${provider}_api_key: `, response: apiKey },
+    ])
+
+    await ptyRun(bin, ['vault', 'set', 'gateway-token'], [
+      { trigger: 'Enter vault password: ', response: password },
+      { trigger: 'Enter value for gateway-token: ', response: token },
+    ])
   }
 
   // connectDev connects to an already-running server via env vars (dev only)

@@ -1,36 +1,62 @@
+import { useMemo, useState } from 'react'
 import type { SiloConnection } from '@shared/types'
+import { createApiClient } from '../lib/api'
+import { useSessions } from '../hooks/useSessions'
+import { SessionSidebar } from './SessionSidebar'
+import { ChatView } from './ChatView'
 
 interface Props {
   connection: SiloConnection
 }
 
 export function Shell({ connection }: Props) {
+  const client = useMemo(() => createApiClient(connection), [connection])
+  const { sessions, loading, refresh } = useSessions(client)
+  // selectedSessionId drives which session the user explicitly opened (controls ChatView key)
+  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null)
+
+  function handleSelectSession(id: string) {
+    setSelectedSessionId(id)
+  }
+
+  function handleNewSession() {
+    setSelectedSessionId(null)
+  }
+
+  // called when backend auto-assigns a session id after the first message — only refresh sidebar
+  function handleSessionChange(_id: string) {
+    refresh()
+  }
+
   return (
-    <div style={styles.root}>
-      {/* Left rail */}
-      <aside style={styles.rail}>
-        <div className="drag-region" style={styles.railHeader}>
-          <span style={styles.wordmark}>silo</span>
+    <div style={s.root}>
+      <aside style={s.rail}>
+        <div className="drag-region" style={s.railHeader}>
+          <span style={s.wordmark}>silo</span>
         </div>
-        <nav style={styles.railNav}>
-          <p style={styles.placeholder}>Sessions</p>
-        </nav>
+        <SessionSidebar
+          sessions={sessions}
+          loading={loading}
+          activeSessionId={selectedSessionId}
+          onSelect={handleSelectSession}
+          onNew={handleNewSession}
+        />
       </aside>
 
-      {/* Center canvas */}
-      <main style={styles.canvas}>
-        <div className="drag-region" style={styles.canvasHeader} />
-        <div style={styles.canvasBody}>
-          <p style={styles.placeholder}>
-            Connected to port {connection.port}
-          </p>
-        </div>
+      <main style={s.canvas}>
+        <div className="drag-region" style={s.canvasHeader} />
+        <ChatView
+          key={selectedSessionId ?? 'new'}
+          client={client}
+          sessionId={selectedSessionId}
+          onSessionChange={handleSessionChange}
+        />
       </main>
     </div>
   )
 }
 
-const styles: Record<string, React.CSSProperties> = {
+const s: Record<string, React.CSSProperties> = {
   root: {
     display: 'flex',
     height: '100vh',
@@ -59,11 +85,6 @@ const styles: Record<string, React.CSSProperties> = {
     color: 'var(--ink)',
     letterSpacing: '-0.02em',
   },
-  railNav: {
-    flex: 1,
-    overflowY: 'auto',
-    padding: '0.75rem 0.5rem',
-  },
   canvas: {
     flex: 1,
     display: 'flex',
@@ -74,17 +95,6 @@ const styles: Record<string, React.CSSProperties> = {
   canvasHeader: {
     height: 52,
     borderBottom: '1px solid var(--border)',
-  },
-  canvasBody: {
-    flex: 1,
-    overflowY: 'auto',
-    padding: '2rem',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  placeholder: {
-    color: 'var(--muted)',
-    fontSize: '0.875rem',
+    flexShrink: 0,
   },
 }

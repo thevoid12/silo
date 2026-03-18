@@ -2,12 +2,23 @@
   "name": "silo-desktop",
   "version": "0.1.0",
   "private": true,
+  "description": "Silo desktop app",
+  "author": {
+    "name": "Silo",
+    "email": "silo@localhost"
+  },
+  "homepage": "https://github.com/siloframework/silo",
   "main": "out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
-    "package": "npm run build && electron-builder",
+    "package": "bun run build && electron-rebuild && electron-builder",
+    "package-test": "bun run build && electron-rebuild && electron-builder --dir",
+    "postinstall": "node node_modules/electron/install.js",
     "test": "playwright test"
+  },
+  "dependencies": {
+    "node-pty": "^1.0.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.45.0",
@@ -17,10 +28,12 @@
     "@vitejs/plugin-react": "^4.3.0",
     "electron": "^31.7.7",
     "electron-builder": "^24.13.3",
+    "@electron/rebuild": "^3.6.0",
     "electron-playwright-helpers": "^1.7.1",
     "electron-vite": "^2.3.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "react-markdown": "^9.0.1",
     "typescript": "^5.5.2",
     "vite": "^5.3.1"
   }
