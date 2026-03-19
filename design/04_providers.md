@@ -1,269 +1,271 @@
-# LLM Provider Specification (V0)
+# LLM Provider Specification
 
-Providers are how Silo's Brain talks to LLMs. In V0, Silo does not implement its own provider abstraction — Google's Agent Development Kit (ADK) handles all model communication natively. Silo's job is to configure ADK with the right model and API key, then let ADK do the rest.
-
----
-
-## 1. Philosophy & Role
-
-- **ADK is the provider layer.** Silo does not wrap, abstract, or re-implement model communication. ADK already speaks to Gemini natively and to OpenAI/Anthropic/others via LiteLLM. There is no `Provider` trait, no custom streaming parser, no token-level plumbing in Silo's codebase.
-- **Silo's only responsibilities:** store API keys securely (vault), read provider config from `silo.toml`, and pass both into ADK at startup.
-- **One provider in V0.** A single configured provider powers the Brain. Multi-provider, hot-swap, and fallback chains are V1.
-- **Swappable via config, not code.** Changing from Gemini to OpenAI is a `silo.toml` edit and a restart — no code changes, no recompilation.
+Providers are how Silo's Brain talks to LLMs. Silo supports any OpenAI-compatible endpoint and Anthropic natively, with a single flat config and a single vault key.
 
 ---
 
-## 2. How ADK Handles Providers
+## 1. Philosophy
 
-ADK supports model communication through two paths:
-
-### Native (Gemini)
-
-ADK talks directly to the Gemini API. No proxy, no translation layer. This is the fastest and most tightly integrated path.
-
-```go
-import "google.golang.org/genai"
-
-// Native Gemini — direct API call, no middleware
-model := genai.GoogleAI("gemini-2.0-flash", apiKey)
-```
-
-### LiteLLM (OpenAI, Anthropic, and Others)
-
-For non-Gemini providers, ADK uses LiteLLM as a unified translation layer. LiteLLM maps the request to the target provider's API format and handles auth, retries, and response parsing.
-
-```go
-import "github.com/google/adk-golang/pkg/models/litellm"
-
-// OpenAI via LiteLLM
-model := litellm.NewLiteLlmModel("openai/gpt-4o", apiKey)
-
-// Anthropic via LiteLLM
-model := litellm.NewLiteLlmModel("anthropic/claude-sonnet-4-20250514", apiKey)
-```
-
-### Local Models (Ollama)
-
-For local/self-hosted models, ADK integrates via LiteLLM's Ollama support or direct Ollama configuration. No API key needed — the model runs on your machine.
-
-```go
-// Local model via Ollama + LiteLLM
-model := litellm.NewLiteLlmModel("ollama/llama3", "")
-```
+- **One active provider at a time.** A single `[providers]` block in config selects the provider, model, and optional base URL. No per-provider subsections.
+- **Generic by default.** The config keys are `provider`, `model`, and `base_url` — not tied to any specific vendor. Changing providers is a config edit, not a code change.
+- **Two underlying SDKs.** `openai-go` covers everything that speaks the OpenAI spec (OpenAI, Gemini via compat endpoint, OpenRouter, Ollama, vLLM, LM Studio). `anthropic-sdk-go` covers Anthropic's native spec. No LiteLLM dependency.
+- **ADK stays as the agent framework.** The Google ADK handles the agent loop, tool calling, and streaming. New providers implement ADK's `model.LLM` interface via format adapters — no changes to the agent loop, session service, or approval system.
+- **API keys in the vault only.** No `.env` files, no shell exports, no plaintext on disk.
 
 ---
 
-## 3. What Silo Does NOT Implement
+## 2. Provider Routing
 
-These were in the old Rust-based spec. They are gone in V0:
+```
+provider == "anthropic"  →  anthropic-sdk-go  (native Anthropic spec)
+anything else            →  openai-go         (OpenAI-compat spec)
+```
 
-| Removed | Why |
-|---------|-----|
-| `Provider` trait | ADK is the abstraction. Silo doesn't need its own. |
-| `TokenStream` / custom streaming | ADK handles streaming natively. |
-| rig crate usage | Replaced entirely by ADK. |
-| Custom proxy provider | LiteLLM + Ollama cover this use case. |
-| Per-request model override | V1. In V0, the model is set in config. |
-| `FallbackProvider` | V1. |
+Built-in base URL defaults (used when `base_url` is empty):
+
+| Provider name | Default base URL |
+|---|---|
+| `openai` | `https://api.openai.com/v1` |
+| `gemini` | `https://generativelanguage.googleapis.com/v1beta/openai/` |
+| `openrouter` | `https://openrouter.ai/api/v1` |
+| any other name | requires `base_url` to be set |
+
+Setting `base_url` overrides the default for any provider name, enabling self-hosted or custom endpoints.
+
+---
+
+## 3. Configuration
+
+### `silo.toml` — flat, single provider
+
+```toml
+[providers]
+default  = "gemini"
+model    = "gemini-2.0-flash"
+base_url = ""   # empty = use built-in default for that provider name
+```
+
+**Examples:**
+
+```toml
+# OpenAI
+default = "openai"
+model   = "gpt-4o"
+
+# Anthropic
+default = "anthropic"
+model   = "claude-opus-4-5"
+
+# OpenRouter
+default  = "openrouter"
+model    = "meta-llama/llama-3.3-70b-instruct"
+base_url = "https://openrouter.ai/api/v1"
+
+# Ollama (self-hosted)
+default  = "ollama"
+model    = "llama3"
+base_url = "http://localhost:11434/v1"
+```
+
+There are no per-provider subsections (`[providers.gemini]` etc.) — a single block covers everything.
 
 ---
 
 ## 4. API Key Management
 
-**"No env business"** — API keys are stored in the encrypted vault only. No `.env` files, no shell exports, no plaintext on disk. This is unchanged from the original philosophy.
-
-### Flow: Key → Vault → ADK
+Single vault key for whichever provider is currently active:
 
 ```
-silo init (or silo vault set)
+llm_api_key
+```
+
+### Flow: Key → Vault → SDK
+
+```
+silo init (or silo vault set llm_api_key)
   → user enters API key
   → key encrypted with XChaCha20-Poly1305 + Argon2id
   → stored in ~/.silo/vault.enc
 
 silo start
   → vault decrypted at startup
-  → key read from vault
-  → injected into ADK model config
-  → ADK uses key for all LLM calls
+  → llm_api_key read from vault
+  → injected into the active provider adapter
+  → adapter uses key for all LLM calls
 ```
 
 The key never touches disk in plaintext. It lives in memory only for the duration of the Silo process.
 
-### Key Injection (Go)
+For self-hosted providers that need no key (e.g. Ollama), `llm_api_key` can be set to any non-empty placeholder or omitted if the vault has no such entry.
+
+---
+
+## 5. Adapter Architecture
+
+ADK's `model.LLM` interface is the extension point:
 
 ```go
-func buildModel(cfg ProviderConfig, vault *Vault) (genai.Model, error) {
-    apiKey, err := vault.Get(cfg.Provider + "_api_key")
-    if err != nil {
-        return nil, fmt.Errorf("no API key for %s in vault: %w", cfg.Provider, err)
-    }
-
-    switch cfg.Provider {
-    case "gemini":
-        return genai.GoogleAI(cfg.Model, apiKey), nil
-    case "openai", "anthropic":
-        prefix := cfg.Provider + "/" + cfg.Model
-        return litellm.NewLiteLlmModel(prefix, apiKey), nil
-    case "ollama":
-        return litellm.NewLiteLlmModel("ollama/"+cfg.Model, ""), nil
-    default:
-        return nil, fmt.Errorf("unknown provider: %s", cfg.Provider)
-    }
+type LLM interface {
+    Name() string
+    GenerateContent(ctx context.Context, req *LLMRequest, stream bool) iter.Seq2[*LLMResponse, error]
 }
 ```
 
+`LLMRequest.Contents` is `[]*genai.Content` (Google's type). Each adapter:
+1. Receives `[]*genai.Content` from ADK
+2. Translates to provider-native format (OpenAI messages / Anthropic messages)
+3. Calls the provider API
+4. Translates response back to `*genai.Content` with `FunctionCall` parts
+
+ADK's agent loop detects tool calls via `part.FunctionCall != nil` — as long as adapters correctly populate this field, the loop works transparently.
+
+### New packages
+
+```
+pkg/core/model/
+  openaicompat/
+    model.go      # model.LLM impl — parameterised by base_url + api_key
+    convert.go    # genai.Content ↔ openai message translation
+  anthropic/
+    model.go      # model.LLM impl — Anthropic native spec
+    convert.go    # genai.Content ↔ anthropic message translation
+```
+
+### ModelFactory signature
+
+```go
+type ModelFactory func(ctx context.Context, modelName, apiKey, baseURL string) (model.LLM, error)
+```
+
+### ProviderConfig
+
+```go
+type ProviderConfig struct {
+    Provider string
+    LLMModel string
+    BaseURL  string // optional, overrides built-in default
+}
+```
+
+### Format translation — genai ↔ OpenAI
+
+```
+genai role "model"           → "assistant"
+genai Part.Text              → string content / text content part
+genai Part.InlineData        → base64 data URL image_url part  (multimodal)
+genai Part.FunctionCall      → tool_calls[]{id, function{name, arguments}}
+genai Part.FunctionResponse  → role "tool" message {tool_call_id, content}
+```
+
+### Format translation — genai ↔ Anthropic
+
+```
+genai Part.FunctionCall      → tool_use content block
+genai Part.FunctionResponse  → tool_result content block
+genai Part.InlineData        → image content block (base64)
+```
+
 ---
 
-## 5. Configuration in `silo.toml`
+## 6. Setup Flows
 
-### V0: Single Provider
-
-```toml
-[providers]
-default = "gemini"
-
-[providers.gemini]
-model = "gemini-2.0-flash"
-```
-
-Or with OpenAI:
-
-```toml
-[providers]
-default = "openai"
-
-[providers.openai]
-model = "gpt-4o"
-```
-
-Or with a local model:
-
-```toml
-[providers]
-default = "ollama"
-
-[providers.ollama]
-model = "llama3"
-# No API key needed — Ollama runs locally
-```
-
-### V1: Multiple Providers
-
-```toml
-[providers]
-default = "gemini"
-
-[providers.gemini]
-model = "gemini-2.0-flash"
-
-[providers.openai]
-model = "gpt-4o"
-
-[providers.anthropic]
-model = "claude-sonnet-4-20250514"
-
-[providers.ollama]
-model = "llama3"
-```
-
-In V1, the `default` key selects the active provider, and fallback chains become possible (see section 8).
-
-### Provider Setup During `silo init`
-
-In V0, the provider is configured during `silo init`. The init wizard asks:
+### `silo init`
 
 ```
 $ silo init
-  Select provider: [gemini] openai / anthropic / ollama
-  Model: [gemini-2.0-flash]
-  Enter API key: sk-••••••••
-  ✓ Key encrypted and stored in vault
-  ✓ Provider "gemini" configured in silo.toml
+  Provider (gemini / openai / anthropic / openrouter / custom): openai
+  Model [gpt-4o]:
+  Base URL (leave blank for built-in default):
+  API key: sk-••••••••
+  ✓ Key stored in vault as llm_api_key
+  ✓ Provider "openai" / model "gpt-4o" saved to ~/.silo/silo.toml
 ```
 
-After init, the provider is set. To change it, edit `silo.toml` and update the vault key.
+Base URL is only prompted when the provider name is not a known built-in.
+
+### if config updated
+- if provider config is manually updated things has to reflect without restarting the app
+### Desktop — Settings screen
+
+- **Provider**: free-text input (any string — not a fixed dropdown)
+- **Model**: text input (unchanged)
+- **Base URL**: optional text input (placeholder: "leave blank for built-in default")
+this will update the silo.toml file which is the source of truth
+---
+
+## 7. Streaming
+
+ADK handles streaming. Adapters implement `iter.Seq2[*model.LLMResponse, error]` using each SDK's streaming API, setting `Partial: true` on delta chunks and `TurnComplete: true` on the final chunk. Silo's only streaming responsibility is the last mile: forwarding ADK's events as SSE to the gateway.
 
 ---
 
-## 6. Streaming
+## 8. Supported Providers
 
-ADK handles streaming natively. Silo does not parse SSE from upstream LLMs, does not buffer tokens, and does not implement any custom streaming logic.
-
-### The Flow
-
-```
-LLM API → ADK (stream parse) → ADK Runner → Silo Brain → Gateway/CLI/Desktop
-```
-
-- **ADK Runner** receives streamed chunks from the LLM and emits events as part of its agent execution loop.
-- **Silo Brain** listens to ADK Runner events and forwards them to the appropriate output channel.
-- **Gateway** emits SSE events (`event: token`, `event: tool_call`, etc.) to HTTP clients.
-- **CLI / Desktop** renders streamed tokens in real-time.
-
-Silo's only streaming responsibility is the last mile: taking ADK's output events and formatting them as SSE for the gateway or as terminal output for the CLI. The heavy lifting (SSE parsing from LLM APIs, chunk reassembly, error recovery) is ADK's problem.
+| Provider | SDK path | Notes |
+|---|---|---|
+| **Gemini** | openai-compat → genai OpenAI endpoint | Default. Uses `https://generativelanguage.googleapis.com/v1beta/openai/` |
+| **OpenAI** | openai-go | GPT-4o, o1, o3, etc. |
+| **Anthropic** | anthropic-sdk-go | Claude Sonnet, Opus, Haiku, etc. |
+| **OpenRouter** | openai-go + base_url | Access to 200+ models via one key |
+| **Ollama / vLLM / LM Studio** | openai-go + base_url | Self-hosted, no key required |
+| **Any OpenAI-compat endpoint** | openai-go + base_url | Custom deployments |
 
 ---
 
-## 7. Supported Providers (V0)
+## 9. OpenRouter & OpenAI-compat Adapter Constraints
 
-| Provider | Path | API Key Required | Notes |
-|----------|------|------------------|-------|
-| **Gemini** | Native ADK | Yes | Default. Best integration, lowest latency. |
-| **OpenAI** | ADK → LiteLLM | Yes | GPT-4o, GPT-4, o1, etc. |
-| **Anthropic** | ADK → LiteLLM | Yes | Claude Sonnet, Opus, Haiku, etc. |
-| **Ollama** | ADK → LiteLLM | No | Local models. Llama, Mistral, Phi, etc. |
+OpenRouter is a transport layer + model marketplace, not a guarantee of uniform behavior. The OpenAI-compat adapter being correct unlocks most models — but behavior varies.
 
-All four are supported in V0 config, but only **one** is active at a time. The `default` key in `silo.toml` selects which one.
+### What works reliably
 
----
+- **Basic text chat**: universally fine across all models
+- **Streaming**: works when the adapter handles OpenAI delta format correctly; some models buffer internally or emit large chunks rather than token-by-token
 
-## 8. Provider Fallback & Hot-Swap (V1)
+### What is model-dependent
 
-These are explicitly out of scope for V0 but designed for in V1:
+**Tool calling**
+- Only works for models that advertise support
+- Some models hallucinate tool schemas more aggressively
+- Common failure modes: invalid JSON in arguments, missing `tool_call_id`, partial tool calls in stream
+- **Streaming + tool calls is a subtle bug zone**: some models emit tool calls gradually with incomplete JSON mid-stream. The adapter must buffer the complete tool call before passing to ADK — never forward partial `tool_calls` chunks
 
-- **Fallback chains:** ordered list of providers. If the primary fails, try the next.
-  ```toml
-  [providers.fallback]
-  order = ["gemini", "openai", "anthropic"]
-  ```
-- **Hot-swap:** change providers at runtime without restarting Silo. Triggered via API or CLI.
-- **Per-request provider override:** API callers can specify which provider to use per request.
-- **Cost-based routing:** route to cheaper providers for simple tasks, expensive providers for complex ones.
+**Multimodal (biggest trap)**
+- Most OpenRouter models do not support images
+- Failure modes: images silently ignored, degraded answers with no error, API accepts but model doesn't use the image
+- Image content parts should only be sent when the model is known to support them
 
-In V0: if the configured provider fails, the Brain returns the error. No automatic retry, no fallback.
+### The adapter must be defensive
 
----
+OpenRouter is *compatible* with OpenAI, not *identical*. The adapter must tolerate:
+- Extra or unknown fields in responses
+- Missing fields in streaming chunks (especially `tool_call_id`, `finish_reason`)
+- `arguments` field not always strict JSON (partial JSON mid-stream, non-standard escaping)
+- Tool call IDs formatted differently across models
 
-## 9. CLI Commands for Provider Management
+### Validation checklist (drives the adapter test suite)
 
-### V0 Commands
-
-Provider management in V0 is minimal — configuration happens during `silo init` and in `silo.toml`:
-
-| Command | Description |
-|---------|-------------|
-| `silo init` | Configures provider, model, and API key as part of initial setup |
-| `silo vault set <provider>_api_key` | Update or add an API key in the vault |
-| `silo config set providers.default <name>` | Switch the active provider |
-
-### V1 Commands
-
-Full provider management CLI is a V1 feature:
-
-| Command | Description |
-|---------|-------------|
-| `silo provider add <name>` | Add a provider — prompts for API key, stores in vault |
-| `silo provider list` | Show configured providers and their status |
-| `silo provider remove <name>` | Remove provider and delete its key from vault |
-| `silo provider test <name>` | Send a test prompt to verify connectivity |
-| `silo provider switch <name>` | Hot-swap the active provider at runtime |
+| Check | What to cover |
+|---|---|
+| Streaming | partial chunks, final `TurnComplete`, no dropped tokens |
+| Tool calling | valid JSON args, stable `tool_call_id`, multiple tool calls in one response |
+| Multimodal | single image, large image, graceful failure for unsupported models |
+| Error handling | invalid model name, quota exceeded, unexpected response shapes |
 
 ---
 
 ## 10. Error Handling
 
-- **Missing API key:** Silo refuses to start if the configured provider requires a key and none is found in the vault. Clear error message: `"No API key for gemini in vault. Run: silo vault set gemini_api_key"`.
-- **Invalid key / auth failure:** ADK surfaces the upstream error. Silo logs it and returns a structured error to the client.
-- **Model not found:** If the configured model doesn't exist on the provider, ADK returns an error. Silo does not maintain a model whitelist — the provider is the source of truth.
-- **Rate limiting:** ADK / LiteLLM handle retry logic for transient errors. Silo surfaces persistent failures to the client.
-- **Ollama not running:** If the configured provider is `ollama` and the local Ollama server is unreachable, Silo returns a clear error: `"Ollama server not reachable at localhost:11434. Is Ollama running?"`.
+- **Missing API key:** Silo refuses to start if `llm_api_key` is absent from the vault for a provider that requires it. Error: `"llm_api_key not found in vault — run: silo vault set llm_api_key"`.
+- **Unknown provider + no base_url:** Error at startup: `"provider 'foo' has no built-in base URL — set providers.base_url in config"`.
+- **Auth failure:** Provider SDK surfaces the upstream error. Silo logs it and returns a structured error to the client.
+- **Model not found:** Returned as-is from the provider. Silo does not maintain a model whitelist.
+- **Self-hosted server unreachable:** Connection error surfaced with the configured `base_url` in the message for easy debugging.
+
+---
+
+## 11. Future (V1)
+
+- Fallback chains: ordered provider list, try next on failure
+- Hot-swap: change provider at runtime without restart
+- Per-request provider override via API
+- `silo provider add/list/remove/test/switch` commands

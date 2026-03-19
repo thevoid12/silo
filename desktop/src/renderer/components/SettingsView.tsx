@@ -8,7 +8,6 @@ interface Props {
 }
 
 const APPROVAL_MODES = ['always', 'per-tool', 'never']
-const PROVIDERS = ['gemini', 'openai']
 
 export function SettingsView({ client, onClose }: Props) {
   const [settings, setSettings] = useState<Settings | null>(null)
@@ -61,26 +60,27 @@ export function SettingsView({ client, onClose }: Props) {
           <div style={s.body}>
             <Section label="AI Provider">
               <Field label="Provider">
-                <select
+                <input
+                  style={s.input}
+                  placeholder="gemini, openai, anthropic, openrouter, …"
                   value={draft.provider}
                   onChange={e => set('provider', e.target.value)}
-                  style={s.select}
-                >
-                  {PROVIDERS.map(p => <option key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>)}
-                </select>
-              </Field>
-              <Field label="Gemini model">
-                <input
-                  style={s.input}
-                  value={draft.gemini_model}
-                  onChange={e => set('gemini_model', e.target.value)}
                 />
               </Field>
-              <Field label="OpenAI model">
+              <Field label="Model">
                 <input
                   style={s.input}
-                  value={draft.openai_model}
-                  onChange={e => set('openai_model', e.target.value)}
+                  placeholder="e.g. gemini-2.0-flash, gpt-4o, claude-sonnet-4-6"
+                  value={draft.model}
+                  onChange={e => set('model', e.target.value)}
+                />
+              </Field>
+              <Field label="Base URL">
+                <input
+                  style={s.input}
+                  placeholder="Leave blank for built-in default"
+                  value={draft.base_url}
+                  onChange={e => set('base_url', e.target.value)}
                 />
               </Field>
             </Section>

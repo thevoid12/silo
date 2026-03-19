@@ -8,10 +8,10 @@ import (
 	"google.golang.org/adk/agent"
 	"google.golang.org/adk/agent/llmagent"
 	"google.golang.org/adk/model"
-	"google.golang.org/adk/model/gemini"
-	"google.golang.org/genai"
 
 	"silo/pkg/config"
+	anthropicadapter "silo/pkg/core/llm_providers/anthropic"
+	openaicompat "silo/pkg/core/llm_providers/openaicompat"
 	coremodels "silo/pkg/core/models"
 	siloerrors "silo/pkg/errors"
 )
@@ -21,10 +21,15 @@ var (
 	modelRegistry = map[string]coremodels.ModelFactory{}
 )
 
-// I am using factory pattern+ registery pattern here for easy extension and less changes
 func init() {
-	RegisterModelFactory("gemini", func(ctx context.Context, modelName, apiKey string) (model.LLM, error) {
-		return gemini.NewModel(ctx, modelName, &genai.ClientConfig{APIKey: apiKey})
+	// anthropic uses its own native SDK
+	RegisterModelFactory("anthropic", func(_ context.Context, modelName, apiKey, _ string) (model.LLM, error) {
+		return anthropicadapter.New(modelName, apiKey), nil
+	})
+
+	// everything else (openai, gemini, openrouter, custom) uses OpenAI-compat SDK
+	RegisterModelFactory("_openaicompat", func(_ context.Context, modelName, apiKey, baseURL string) (model.LLM, error) {
+		return openaicompat.New(modelName, apiKey, baseURL), nil
 	})
 }
 
@@ -55,16 +60,25 @@ func Build(ctx context.Context, cfg coremodels.BuildConfig) (agent.Agent, error)
 	return a, nil
 }
 
-// buildModel looks up the registered factory for the provider and creates the model
+// buildModel resolves the factory for the provider and constructs the model.LLM
 func buildModel(ctx context.Context, prov coremodels.ProviderConfig, apiKey string) (model.LLM, error) {
 	registryMu.RLock()
 	factory, ok := modelRegistry[prov.Provider]
+	if !ok {
+		factory, ok = modelRegistry["_openaicompat"]
+	}
 	registryMu.RUnlock()
 
 	if !ok {
 		return nil, fmt.Errorf("%w: %q", siloerrors.ErrUnsupportedProvider, prov.Provider)
 	}
-	return factory(ctx, prov.LLMModel, apiKey)
+
+	baseURL := prov.BaseURL
+	if baseURL == "" {
+		baseURL = openaicompat.BuiltinBaseURL(prov.Provider)
+	}
+
+	return factory(ctx, prov.LLMModel, apiKey, baseURL)
 }
 
 // resolveSystemPrompt loads from toml file at path if set, falls back to built-in default

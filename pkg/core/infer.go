@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"google.golang.org/adk/model"
 	"google.golang.org/genai"
 
 	coremodels "silo/pkg/core/models"
@@ -40,11 +41,6 @@ func BuildApprovalInferrer(prov coremodels.ProviderConfig, apiKey string) gatewa
 			return false, nil
 		}
 
-		client, err := genai.NewClient(ctx, &genai.ClientConfig{APIKey: apiKey})
-		if err != nil {
-			return false, fmt.Errorf("infer approval: create client: %w", err)
-		}
-
 		var prompt string
 		if toolName != "" || command != "" {
 			prompt = fmt.Sprintf(
@@ -58,15 +54,37 @@ func BuildApprovalInferrer(prov coremodels.ProviderConfig, apiKey string) gatewa
 			)
 		}
 
-		resp, err := client.Models.GenerateContent(ctx, prov.LLMModel, genai.Text(prompt), nil)
+		llm, err := buildModel(ctx, prov, apiKey)
 		if err != nil {
-			return false, fmt.Errorf("infer approval: generate: %w", err)
-		}
-		if resp == nil || len(resp.Candidates) == 0 {
-			return false, fmt.Errorf("infer approval: empty response")
+			return false, fmt.Errorf("infer approval: build model: %w", err)
 		}
 
-		text := strings.TrimSpace(strings.ToLower(resp.Text()))
-		return strings.HasPrefix(text, "true"), nil
+		text, err := llmInferText(ctx, llm, prompt)
+		if err != nil {
+			return false, fmt.Errorf("infer approval: %w", err)
+		}
+		return strings.HasPrefix(strings.TrimSpace(strings.ToLower(text)), "true"), nil
 	}
+}
+
+// llmInferText runs a single non-streaming LLM call and returns the first text response.
+func llmInferText(ctx context.Context, llm model.LLM, prompt string) (string, error) {
+	req := &model.LLMRequest{
+		Contents: []*genai.Content{
+			{Role: "user", Parts: []*genai.Part{{Text: prompt}}},
+		},
+	}
+	for resp, err := range llm.GenerateContent(ctx, req, false) {
+		if err != nil {
+			return "", err
+		}
+		if resp != nil && resp.Content != nil {
+			for _, p := range resp.Content.Parts {
+				if p != nil && p.Text != "" {
+					return p.Text, nil
+				}
+			}
+		}
+	}
+	return "", fmt.Errorf("empty response from LLM")
 }

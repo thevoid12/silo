@@ -15,8 +15,8 @@ import (
 func (s *server) handleGetSettings(c *gin.Context) {
 	c.JSON(http.StatusOK, models.SettingsResponse{
 		Provider:      viper.GetString("providers.default"),
-		GeminiModel:   viper.GetString("providers.gemini.model"),
-		OpenAIModel:   viper.GetString("providers.openai.model"),
+		Model:         viper.GetString("providers.model"),
+		BaseURL:       viper.GetString("providers.base_url"),
 		MaxIterations: viper.GetInt("agent.max_iterations"),
 		ApprovalMode:  viper.GetString("tools.approval.mode"),
 		ShellTimeout:  viper.GetInt("tools.shell.timeout_secs"),
@@ -33,11 +33,11 @@ func (s *server) handleUpdateSettings(c *gin.Context) {
 	if req.Provider != nil {
 		viper.Set("providers.default", *req.Provider)
 	}
-	if req.GeminiModel != nil {
-		viper.Set("providers.gemini.model", *req.GeminiModel)
+	if req.Model != nil {
+		viper.Set("providers.model", *req.Model)
 	}
-	if req.OpenAIModel != nil {
-		viper.Set("providers.openai.model", *req.OpenAIModel)
+	if req.BaseURL != nil {
+		viper.Set("providers.base_url", *req.BaseURL)
 	}
 	if req.MaxIterations != nil {
 		viper.Set("agent.max_iterations", *req.MaxIterations)

@@ -4,12 +4,8 @@
 
 [providers]
 default = "gemini"
-
-[providers.gemini]
 model = "gemini-2.0-flash"
-
-[providers.openai]
-model = "gpt-4o"
+base_url = ""
 
 [agent]
 max_iterations = 25

@@ -16,7 +16,9 @@ export interface UnlockResult {
 
 export interface SetupParams {
   password: string
-  provider: 'gemini' | 'openai'
+  provider: string
+  model: string
+  baseUrl: string
   apiKey: string
 }
 
@@ -81,8 +83,8 @@ export interface Message {
 // Settings — mirrors Go's SettingsResponse
 export interface Settings {
   provider: string
-  gemini_model: string
-  openai_model: string
+  model: string
+  base_url: string
   max_iterations: number
   approval_mode: string
   shell_timeout_secs: number

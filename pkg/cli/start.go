@@ -184,7 +184,8 @@ func runServe() error {
 		return fmt.Errorf("gateway.host and gateway.port must be set in config")
 	}
 
-	llmModel := viper.GetString(fmt.Sprintf("providers.%s.model", provider))
+	llmModel := viper.GetString("providers.model")
+	baseURL := viper.GetString("providers.base_url")
 	approvalTimeout := time.Duration(viper.GetInt("tools.approval.timeout")) * time.Second
 	shellTimeout := time.Duration(viper.GetInt("tools.shell.timeout_secs")) * time.Second
 	homeDir, _ := os.UserHomeDir()
@@ -209,7 +210,7 @@ func runServe() error {
 			SystemPromptPath: sysPromptPath,
 			MaxIterations:    viper.GetInt("agent.max_iterations"),
 		},
-		Prov:   coremodels.ProviderConfig{Provider: provider, LLMModel: llmModel},
+		Prov:   coremodels.ProviderConfig{Provider: provider, LLMModel: llmModel, BaseURL: baseURL},
 		APIKey: apiKey,
 	}
 
@@ -243,7 +244,7 @@ func runServe() error {
 		return sr.Runner, nil
 	}
 
-	inferApproval := core.BuildApprovalInferrer(coremodels.ProviderConfig{Provider: provider, LLMModel: llmModel}, apiKey)
+	inferApproval := core.BuildApprovalInferrer(coremodels.ProviderConfig{Provider: provider, LLMModel: llmModel, BaseURL: baseURL}, apiKey)
 
 	deps := gatewaymodels.ServerDeps{
 		Sessions:      sharedSessions,

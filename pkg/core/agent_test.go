@@ -10,8 +10,8 @@ import (
 
 	"google.golang.org/adk/model"
 
-	siloerrors "silo/pkg/errors"
 	coremodels "silo/pkg/core/models"
+	siloerrors "silo/pkg/errors"
 )
 
 func TestResolveSystemPrompt_default(t *testing.T) {
@@ -40,21 +40,28 @@ func TestResolveSystemPrompt_missingFile(t *testing.T) {
 	}
 }
 
-func TestBuildModel_unsupportedProvider(t *testing.T) {
-	_, err := buildModel(context.Background(), coremodels.ProviderConfig{Provider: "openai", LLMModel: "gpt-4o"}, "key")
-	if err == nil {
-		t.Fatal("expected error for unsupported provider")
+// openai falls through to _openaicompat factory, so it should succeed (not ErrUnsupportedProvider)
+func TestBuildModel_openaiCompatFallthrough(t *testing.T) {
+	llm, err := buildModel(context.Background(), coremodels.ProviderConfig{Provider: "openai", LLMModel: "gpt-4o"}, "key")
+	if err != nil {
+		t.Fatalf("expected openai to resolve via openaicompat factory, got: %v", err)
+	}
+	if llm == nil {
+		t.Fatal("expected non-nil LLM")
 	}
 }
 
-func TestBuild_unsupportedProvider(t *testing.T) {
-	_, err := Build(context.Background(), coremodels.BuildConfig{
+func TestBuild_openai(t *testing.T) {
+	a, err := Build(context.Background(), coremodels.BuildConfig{
 		Agent:  coremodels.AgentConfig{Name: "silo"},
 		Prov:   coremodels.ProviderConfig{Provider: "openai", LLMModel: "gpt-4o"},
 		APIKey: "key",
 	})
-	if err == nil {
-		t.Fatal("expected error for unsupported provider")
+	if err != nil {
+		t.Fatalf("Build failed: %v", err)
+	}
+	if a == nil {
+		t.Fatal("expected non-nil agent")
 	}
 }
 
@@ -72,10 +79,10 @@ func TestBuild_gemini(t *testing.T) {
 	}
 }
 
-// TestRegisterModelFactory_resolvedOnBuild verifies that a registered factory is invoked by Build
+// TestRegisterModelFactory_resolvedOnBuild verifies a registered factory is invoked by Build
 func TestRegisterModelFactory_resolvedOnBuild(t *testing.T) {
 	sentinelErr := fmt.Errorf("factory was called")
-	RegisterModelFactory("custom-provider", func(_ context.Context, _, _ string) (model.LLM, error) {
+	RegisterModelFactory("custom-provider", func(_ context.Context, _, _, _ string) (model.LLM, error) {
 		return nil, sentinelErr
 	})
 

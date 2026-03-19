@@ -42,10 +42,10 @@ func SetDefaults() {
 	viper.SetDefault("gateway.timeouts.write", "60s")
 	viper.SetDefault("gateway.timeouts.idle", "120s")
 
-	// Provider defaults
+	// Provider defaults (flat: one active provider at a time)
 	viper.SetDefault("providers.default", "gemini")
-	viper.SetDefault("providers.gemini.model", "gemini-2.0-flash")
-	viper.SetDefault("providers.openai.model", "gpt-4o")
+	viper.SetDefault("providers.model", "gemini-2.0-flash")
+	viper.SetDefault("providers.base_url", "")
 
 	// Tool approval defaults
 	viper.SetDefault("tools.approval.mode", "per-tool")
