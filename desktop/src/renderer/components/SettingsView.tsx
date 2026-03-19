@@ -78,7 +78,7 @@ export function SettingsView({ client, onClose }: Props) {
               <Field label="Base URL">
                 <input
                   style={s.input}
-                  placeholder="Leave blank for built-in default"
+                  placeholder="Leave blank for built-in default (gemini,openai,claude,openrouter)"
                   value={draft.base_url}
                   onChange={e => set('base_url', e.target.value)}
                 />
